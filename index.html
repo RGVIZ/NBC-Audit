@@ -74,6 +74,14 @@
         .styled-table th:nth-child(8), .styled-table td:nth-child(8) { width: 10%; } /* Rating (Complaints) */
         .styled-table th:nth-child(9), .styled-table td:nth-child(9) { width: 10%; } /* Final Rating */
         .styled-table th:nth-child(10), .styled-table td:nth-child(10) { width: 10%; } /* Frequency */
+        
+        /* Custom classes for highlights */
+        .frequency-once {
+            background-color: #dcfce7 !important; /* Tailwind's bg-green-200 */
+        }
+        .frequency-twice {
+            background-color: #fee2e2 !important; /* Tailwind's bg-red-200 */
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4 sm:p-8">
@@ -237,9 +245,9 @@
                 td.textContent = calculatedRow.frequency;
                 td.classList.add('text-center', 'font-medium', 'text-gray-900');
                 if (calculatedRow.frequency === 'Once') {
-                    td.classList.add('bg-green-200');
+                    td.classList.add('frequency-once');
                 } else if (calculatedRow.frequency === 'Twice') {
-                    td.classList.add('bg-red-200');
+                    td.classList.add('frequency-twice');
                 }
                 tr.appendChild(td);
                 
