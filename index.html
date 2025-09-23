@@ -18,30 +18,32 @@
         .styled-table {
             border-collapse: separate;
             border-spacing: 0;
+            table-layout: fixed; /* This is key to controlling column widths */
+            width: 100%;
         }
         .styled-table th, .styled-table td {
             border: 1px solid #e5e7eb;
-            padding: 12px 15px;
+            padding: 12px 8px; /* Reduced padding for smaller screens */
             text-align: left;
+            word-wrap: break-word; /* Allows long text to wrap */
         }
         .styled-table th {
             background-color: #f3f4f6;
             font-weight: 600;
             color: #1f2937;
             text-transform: uppercase;
-            white-space: nowrap;
+            white-space: normal; /* Changed to normal to allow wrapping */
         }
         .styled-table td {
             background-color: #ffffff;
             transition: background-color 0.2s ease-in-out;
-            white-space: nowrap;
+            white-space: normal; /* Changed to normal to allow wrapping */
         }
         .styled-table tr:hover td {
             background-color: #f9fafb;
         }
         .styled-table input, .styled-table select {
             width: 100%;
-            min-width: 100px;
             border: none;
             outline: none;
             padding: 0;
@@ -61,6 +63,17 @@
         .table-container::-webkit-scrollbar-thumb:hover {
             background-color: #9ca3af;
         }
+        /* Responsive adjustments for columns */
+        .styled-table th:nth-child(1), .styled-table td:nth-child(1) { width: 10%; } /* Actions */
+        .styled-table th:nth-child(2), .styled-table td:nth-child(2) { width: 10%; } /* Line */
+        .styled-table th:nth-child(3), .styled-table td:nth-child(3) { width: 10%; } /* Target */
+        .styled-table th:nth-child(4), .styled-table td:nth-child(4) { width: 10%; } /* Assembly PPM */
+        .styled-table th:nth-child(5), .styled-table td:nth-child(5) { width: 10%; } /* % Change */
+        .styled-table th:nth-child(6), .styled-table td:nth-child(6) { width: 10%; } /* Rating (% Change) */
+        .styled-table th:nth-child(7), .styled-table td:nth-child(7) { width: 10%; } /* Customer Complaints */
+        .styled-table th:nth-child(8), .styled-table td:nth-child(8) { width: 10%; } /* Rating (Complaints) */
+        .styled-table th:nth-child(9), .styled-table td:nth-child(9) { width: 10%; } /* Final Rating */
+        .styled-table th:nth-child(10), .styled-table td:nth-child(10) { width: 10%; } /* Frequency */
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4 sm:p-8">
@@ -68,8 +81,8 @@
     <div class="w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-6 sm:p-8 space-y-8">
 
         <header class="text-center space-y-2">
-            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Audit Module</h1>
-            <h2 class="text-2xl font-semibold text-gray-600">Decision Table</h2>
+            <h1 class="text-xl font-extrabold text-gray-800 tracking-tight">Audit Module</h1>
+            <h2 class="text-base font-semibold text-gray-600">Decision Table</h2>
         </header>
 
         <main class="space-y-6">
@@ -77,16 +90,16 @@
                 <table class="styled-table min-w-full">
                     <thead>
                         <tr>
-                            <th class="w-24">Actions</th>
-                            <th>Line</th>
-                            <th>Target</th>
-                            <th>Assembly PPM</th>
-                            <th>% Change</th>
-                            <th>Rating (% Change)</th>
-                            <th>Customer Complaints</th>
-                            <th>Rating (Complaints)</th>
-                            <th>Final Rating</th>
-                            <th>Frequency</th>
+                            <th class="w-24 text-sm whitespace-nowrap">Actions</th>
+                            <th class="text-sm whitespace-nowrap">Line</th>
+                            <th class="text-sm whitespace-nowrap">Target</th>
+                            <th class="text-sm whitespace-nowrap">Assembly PPM</th>
+                            <th class="text-sm whitespace-nowrap">% Change</th>
+                            <th class="text-sm whitespace-nowrap">Rating (% Change)</th>
+                            <th class="text-sm whitespace-nowrap">Customer Complaints</th>
+                            <th class="text-sm whitespace-nowrap">Rating (Complaints)</th>
+                            <th class="text-sm whitespace-nowrap">Final Rating</th>
+                            <th class="text-sm whitespace-nowrap">Frequency</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
@@ -151,33 +164,87 @@
 
         // Function to render the entire table from the data
         function renderTable() {
-            const html = tableData.map((row, index) => {
+            // Clear existing table body
+            tableBody.innerHTML = '';
+
+            tableData.forEach((row, index) => {
                 const calculatedRow = calculateRow(row);
-                return `
-                    <tr>
-                        <td>
-                            <button onclick="deleteRow(${index})" class="bg-red-500 text-white rounded-md p-1 hover:bg-red-600 transition">
+                
+                // Create a new table row element
+                const tr = document.createElement('tr');
+
+                // Actions cell
+                let td = document.createElement('td');
+                td.innerHTML = `<button onclick="deleteRow(${index})" class="bg-red-500 text-white rounded-md p-1 hover:bg-red-600 transition">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.214 21H7.786a2 2 0 01-1.927-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                        </td>
-                        <td>
-                            <select onchange="updateLine(event, ${index})" class="w-full border-none outline-none p-0 text-gray-800 bg-transparent">
-                                <option value="" disabled selected>Select Line</option>
-                                ${lines.map(line => `<option value="${line}" ${line === row.line ? 'selected' : ''}>${line}</option>`).join('')}
-                            </select>
-                        </td>
-                        <td><input type="text" value="${calculatedRow.target}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                        <td><input type="number" oninput="updatePPM(event, ${index})" value="${row.assemblyPPM}" placeholder="Enter value..." class="data-cell"></td>
-                        <td><input type="text" value="${calculatedRow.change}%" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                        <td><input type="text" value="${calculatedRow.ratingChange}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                        <td><input type="number" oninput="updateComplaints(event, ${index})" value="${row.customerComplaints}" placeholder="Enter count..." class="data-cell"></td>
-                        <td><input type="text" value="${calculatedRow.ratingComplaints}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                        <td><input type="text" value="${calculatedRow.finalRating}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                        <td><input type="text" value="${calculatedRow.frequency}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed"></td>
-                    </tr>
-                `;
-            }).join('');
-            tableBody.innerHTML = html;
+                            </button>`;
+                tr.appendChild(td);
+
+                // Line cell
+                td = document.createElement('td');
+                const select = document.createElement('select');
+                select.onchange = (e) => updateLine(e, index);
+                select.className = "w-full border-none outline-none p-0 text-gray-800 bg-transparent";
+                lines.forEach(line => {
+                    const option = document.createElement('option');
+                    option.value = line;
+                    option.textContent = line;
+                    if (line === row.line) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+                td.appendChild(select);
+                tr.appendChild(td);
+
+                // Target cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="text" value="${calculatedRow.target}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed">`;
+                tr.appendChild(td);
+
+                // Assembly PPM cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="number" oninput="updatePPM(event, ${index})" value="${row.assemblyPPM}" placeholder="Enter value..." class="data-cell">`;
+                tr.appendChild(td);
+
+                // % Change cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="text" value="${calculatedRow.change}%" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed">`;
+                tr.appendChild(td);
+
+                // Rating (% Change) cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="text" value="${calculatedRow.ratingChange}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed">`;
+                tr.appendChild(td);
+
+                // Customer Complaints cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="number" oninput="updateComplaints(event, ${index})" value="${row.customerComplaints}" placeholder="Enter count..." class="data-cell">`;
+                tr.appendChild(td);
+
+                // Rating (Complaints) cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="text" value="${calculatedRow.ratingComplaints}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed">`;
+                tr.appendChild(td);
+
+                // Final Rating cell
+                td = document.createElement('td');
+                td.innerHTML = `<input type="text" value="${calculatedRow.finalRating}" disabled class="data-cell disabled:bg-gray-100 text-gray-500 cursor-not-allowed">`;
+                tr.appendChild(td);
+                
+                // Frequency cell
+                td = document.createElement('td');
+                td.textContent = calculatedRow.frequency;
+                td.classList.add('text-center', 'font-medium', 'text-gray-900');
+                if (calculatedRow.frequency === 'Once') {
+                    td.classList.add('bg-green-200');
+                } else if (calculatedRow.frequency === 'Twice') {
+                    td.classList.add('bg-red-200');
+                }
+                tr.appendChild(td);
+                
+                tableBody.appendChild(tr);
+            });
         }
 
         // Functions to handle user input and data updates
