@@ -1,30 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Briefcase, CalendarCheck, ClipboardList, Pencil, CheckCircle, Trash2, Settings, Eye, ArrowLeft, Download, Upload, Plus, Save } from 'lucide-react';
+import { Briefcase, CalendarCheck, ClipboardList, Pencil, CheckCircle, Trash2, Settings, Eye, ArrowLeft, Download, Upload, Plus, Save, ChevronDown, Check } from 'lucide-react';
 
 // --- Data Structures (Mock Data) ---
 
 // Line options for the dropdown
 const LINE_OPTIONS = ['Production Line', 'Assembly Line', 'Quality Check', 'Packaging', 'Shipping'];
 
+// Mock user data for the Coordinator dropdown
+const MOCK_COORDINATORS = [
+    'Alice Johnson', 'Bob Smith', 'Charlie Brown', 'Diana Prince', 'Evan Ross',
+    'Fiona Green', 'George Harris', 'Hannah Lee'
+];
+
 // Initial Mock data for the Audit Records Listing
-const AuditRecordsData = [
-  { id: 1, name: 'Q1 Financial Review', coordinators: ['Alice Johnson', 'Bob Smith'], auditee: 'Internal', status: 'New', matrixData: [
+const initialAuditRecordsData = [
+  { id: 1, name: 'Q1 Financial Review', coordinators: ['Alice Johnson', 'Bob Smith'], auditee: 'Internal', status: 'New', description: 'Review of financial statements and compliance measures for the first quarter.', matrixData: [
     { id: 101, line: 'Production Line', target: 100, actualPPM: 120, complaints: 1 },
     { id: 102, line: 'Assembly Line', target: 50, actualPPM: 40, complaints: 0 },
     { id: 103, line: 'Quality Check', target: 10, actualPPM: 15, complaints: 5 },
   ]},
-  { id: 2, name: 'Vendor Security Assessment', coordinators: ['Bob Smith'], auditee: 'Supplier', status: 'New', matrixData: [] },
-  { id: 3, name: 'Marketing Compliance', coordinators: ['Diana Prince', 'Alice Johnson', 'Charlie Brown'], auditee: 'Internal', status: 'New', matrixData: [] },
+  { id: 2, name: 'Vendor Security Assessment', coordinators: ['Bob Smith'], auditee: 'Supplier', status: 'New', description: 'Annual security and data privacy assessment of third-party vendors.', matrixData: [] },
+  { id: 3, name: 'Marketing Compliance', coordinators: ['Diana Prince', 'Alice Johnson', 'Charlie Brown'], auditee: 'Internal', status: 'New', description: 'Check all Q4 marketing materials for regulatory compliance.', matrixData: [] },
 ];
 
-// Mock data for the Audit Schedule (kept for the second tab)
+// Mock data for the Audit Schedule
 const ScheduleData = [
   { id: 101, title: 'Annual Financial Review', startDate: '2024-10-01', endDate: '2024-10-31', status: 'In Progress', lead: 'J. Smith' },
   { id: 102, title: 'Cloud Security Assessment', startDate: '2025-01-15', endDate: '2025-03-30', status: 'Planned', lead: 'A. Chen' },
   { id: 103, title: 'Vendor Compliance Check', startDate: '2024-12-01', endDate: '2024-12-15', status: 'Awaiting Kickoff', lead: 'M. Lee' },
 ];
 
-// --- Calculation Logic (Utility Functions) ---
+// --- Calculation Logic (Utility Functions - Unchanged) ---
 
 const calculateMetrics = (target, actualPPM, complaints) => {
     target = Number(target) || 0;
@@ -50,7 +56,6 @@ const calculateMetrics = (target, actualPPM, complaints) => {
     if (complaints === 0) {
         complaintsRating = 5; // No customer issues* (0 complaints)
     } else if (complaints >= 1 && complaints <= 2) {
-        // Adjusted to 1-2 to avoid ambiguity with the next category starting at 3
         complaintsRating = 3; // Minor customer issues* (1-2 complaints)
     } else {
         complaintsRating = 1; // Major customer issues* (≥ 3 complaints)
@@ -102,12 +107,204 @@ const Badge = ({ children, type }) => {
     );
 };
 
-// --- Row Component for Matrix Data ---
+// --- Modal Component for Creating/Editing Audits (Refactored) ---
+
+const AuditRecordModal = ({ isOpen, onClose, initialData, onSave }) => {
+    const isEditing = !!initialData?.id;
+
+    // Initial form state based on whether we are editing or creating
+    const getInitialState = useCallback(() => ({
+        name: initialData?.name || '',
+        coordinators: initialData?.coordinators || [],
+        auditee: initialData?.auditee || 'Internal',
+        description: initialData?.description || '',
+    }), [initialData]);
+
+    const [formData, setFormData] = useState(getInitialState);
+    const [isCoordDropdownOpen, setIsCoordDropdownOpen] = useState(false);
+
+    // Effect to reset state when initialData changes (i.e., when switching between edit/create)
+    useEffect(() => {
+        setFormData(getInitialState());
+    }, [initialData, getInitialState]);
+
+    if (!isOpen) return null;
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAuditeeToggle = (auditeeType) => {
+        setFormData(prev => ({ ...prev, auditee: auditeeType }));
+    };
+    
+    const handleCoordinatorToggle = (coordinator) => {
+        setFormData(prev => {
+            const currentCoords = prev.coordinators;
+            if (currentCoords.includes(coordinator)) {
+                return { ...prev, coordinators: currentCoords.filter(c => c !== coordinator) };
+            } else {
+                return { ...prev, coordinators: [...currentCoords, coordinator] };
+            }
+        });
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        
+        // Pass the ID if it exists (for editing)
+        const recordToSave = isEditing 
+            ? { ...initialData, ...formData }
+            : { ...formData, status: 'New', matrixData: [] };
+
+        onSave(recordToSave);
+        onClose(); // Close the modal upon successful operation
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 transition-opacity">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg transition-transform transform scale-100">
+                
+                {/* Modal Header */}
+                <div className="px-6 py-4 border-b">
+                    <h3 className="text-xl font-bold text-gray-800">
+                        {isEditing ? `Edit Audit Record: ${initialData.name}` : 'Create New Audit Record'}
+                    </h3>
+                </div>
+
+                {/* Modal Body (Form) */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                    
+                    {/* 1. Name */}
+                    <div>
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                            Name
+                        </label>
+                        <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            value={formData.name}
+                            onChange={handleChange}
+                            required
+                            placeholder="e.g., Q3 Production Safety Audit"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
+                        />
+                    </div>
+
+                    {/* 2. Coordinator (Multi Select User Dropdown) */}
+                    <div className="relative">
+                        <label htmlFor="coordinator" className="block text-sm font-medium text-gray-700 mb-1">
+                            Coordinator(s)
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => setIsCoordDropdownOpen(!isCoordDropdownOpen)}
+                            className="w-full text-left flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition"
+                        >
+                            <span className={`truncate ${formData.coordinators.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                                {formData.coordinators.length > 0 
+                                    ? formData.coordinators.join(', ')
+                                    : 'Select one or more coordinators'
+                                }
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transform transition-transform ${isCoordDropdownOpen ? 'rotate-180' : 'rotate-0'}`} />
+                        </button>
+                        
+                        {isCoordDropdownOpen && (
+                            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                {MOCK_COORDINATORS.map(coord => (
+                                    <div 
+                                        key={coord} 
+                                        className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-indigo-50"
+                                        onClick={() => handleCoordinatorToggle(coord)}
+                                    >
+                                        <span>{coord}</span>
+                                        {formData.coordinators.includes(coord) && (
+                                            <Check className="w-4 h-4 text-indigo-600" />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 3. Auditee (Toggle) */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Auditee
+                        </label>
+                        <div className="inline-flex rounded-lg shadow-sm border border-gray-200 p-0.5 bg-gray-50">
+                            {['Internal', 'Supplier'].map(type => (
+                                <button
+                                    key={type}
+                                    type="button"
+                                    onClick={() => handleAuditeeToggle(type)}
+                                    className={`
+                                        px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-150
+                                        ${formData.auditee === type
+                                            ? 'bg-indigo-600 text-white shadow-md'
+                                            : 'text-gray-600 hover:bg-white'
+                                        }
+                                    `}
+                                >
+                                    {type}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* 4. Description */}
+                    <div>
+                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                            Description
+                        </label>
+                        <textarea
+                            name="description"
+                            id="description"
+                            rows="4"
+                            value={formData.description}
+                            onChange={handleChange}
+                            placeholder="Provide a brief summary of the audit's scope and objectives."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
+                        />
+                    </div>
+
+                </form>
+
+                {/* Modal Footer */}
+                <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        onClick={handleSubmit}
+                        className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                    >
+                        {isEditing ? (
+                            <><Save className="w-4 h-4 inline mr-1" /> Save Changes</>
+                        ) : (
+                            <><Plus className="w-4 h-4 inline mr-1" /> Create Record</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// --- Row Component for Matrix Data (Unchanged) ---
 
 /**
  * Renders a single, editable row in the Audit Decision Matrix table.
  */
-// Added initialIsEditing prop to allow new rows to start in edit mode
 const MatrixRow = ({ initialData, initialIsEditing = false, onSave, onDelete }) => {
     const [isEditing, setIsEditing] = useState(initialIsEditing);
     const [editData, setEditData] = useState(initialData);
@@ -282,14 +479,10 @@ const MatrixRow = ({ initialData, initialIsEditing = false, onSave, onDelete }) 
 };
 
 
-// --- Main View Components ---
+// --- Audit Decision Matrix Detail (Unchanged) ---
 
 /**
  * Renders the detailed Audit Decision Matrix for a specific record.
- * @param {object} props
- * @param {string} props.auditName - The name of the audit (e.g., 'Q1 Financial Review')
- * @param {function} props.onBack - Function to return to the listing page
- * @param {object[]} props.initialMatrixData - The initial matrix data for this audit
  */
 const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => {
     // State for the matrix data rows
@@ -310,13 +503,11 @@ const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => 
                 ? { ...dataToSave } // Save the cleaned data without 'isNew'
                 : row
         ));
-        // In a real app, you would send dataToSave to Firestore here.
         console.log(`Row ${id} saved:`, dataToSave);
     }, []);
 
     const handleDeleteRow = useCallback((id) => {
         setMatrixData(prev => prev.filter(row => row.id !== id));
-        // In a real app, you would delete the record in Firestore here.
         console.log(`Row ${id} deleted.`);
     }, []);
     
@@ -331,7 +522,6 @@ const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => 
         };
         setMatrixData(prev => [...prev, newRow]);
         setNextId(prev => prev + 1);
-        // In a real app, you would add the new record to Firestore here.
         console.log('New row added:', newRow);
     };
 
@@ -394,13 +584,8 @@ const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => 
             {/* Matrix Data Section */}
             <h3 className="text-xl font-semibold text-gray-800 mb-4">Matrix Data</h3>
             
-            <div className="flex flex-col sm:flex-row justify-end sm:justify-between items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
-                <input 
-                    type="text" 
-                    placeholder="Search..."
-                    className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
-                />
-                <div className="flex space-x-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
+                <div className="flex space-x-3 w-full sm:w-auto justify-end">
                     <button className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
                         <Download className="w-4 h-4 mr-2" /> Download Import Format
                     </button>
@@ -456,80 +641,155 @@ const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => 
 
 
 /**
- * Renders the Audit Records Listing view.
- * @param {object} props
- * @param {function} props.onViewDetails - Function to navigate to the detail page
+ * Renders the Audit Records Listing view and manages the Create/Edit Record Modal.
  */
-const AuditRecordsListing = ({ onViewDetails }) => (
-  <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
-    <div className="flex justify-between items-center mb-6 border-b pb-4">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center">
-            <ClipboardList className="w-6 h-6 mr-3 text-indigo-600" />
-            Audit Records Listing
-        </h2>
-        <button className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
-            <Pencil className="w-4 h-4 mr-2" />
-            Create New Record
-        </button>
-    </div>
-    
-    <p className="text-sm text-gray-600 mb-6">
-      <span className="font-semibold text-indigo-600">Displaying only the latest 3 records for brevity.</span> Manage all auditable records and their associated risk profile (to be implemented).
-    </p>
+const AuditRecordsListing = ({ onViewDetails }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingRecord, setEditingRecord] = useState(null); // Holds the record data if editing, or null if creating
+    const [records, setRecords] = useState(initialAuditRecordsData); // Use state for records
 
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            {['NAME', 'COORDINATORS', 'AUDITEE', 'STATUS', 'ACTIONS'].map((header) => (
-              <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {AuditRecordsData.map((item) => (
-            <tr key={item.id} className="hover:bg-indigo-50 transition duration-150">
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                {item.name}
-              </td>
-              <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">
-                {item.coordinators.join(', ')}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                <Badge type="Auditee">{item.auditee}</Badge>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                <Badge type="Status">{item.status}</Badge>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <div className="flex space-x-3 text-gray-500">
-                    {/* 1. Edit Action */}
-                    <button className="text-indigo-500 hover:text-indigo-600 transition" title="Edit Record">
-                        <Pencil className="w-4 h-4" />
-                    </button>
-                    {/* 2. View Action - Triggers the page change */}
-                    <button 
-                        onClick={() => onViewDetails(item.id, item.name, item.matrixData)} 
-                        className="text-green-500 hover:text-green-600 transition" 
-                        title="View Details"
-                    >
-                        <Eye className="w-4 h-4" />
-                    </button>
-                    {/* 3. Delete Action */}
-                    <button className="text-red-500 hover:text-red-600 transition" title="Delete Record">
-                        <Trash2 className="w-4 h-4" />
-                    </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
+    // --- CRUD Handlers ---
+
+    // Handles creation (if record has no ID) or updating (if record has ID)
+    const handleSaveRecord = (recordToSave) => {
+        if (recordToSave.id) {
+            // Update existing record
+            setRecords(prev => prev.map(r => r.id === recordToSave.id ? recordToSave : r));
+            console.log('Record Updated:', recordToSave.name);
+        } else {
+            // Create new record
+            const newRecord = {
+                ...recordToSave,
+                id: Math.max(...records.map(r => r.id), 0) + 1,
+                // status and matrixData are already defaulted in AuditRecordModal for creation
+            };
+            setRecords(prev => [newRecord, ...prev]);
+            console.log('Record Created:', newRecord.name);
+        }
+    };
+    
+    // Handles deletion
+    const handleDeleteRecord = (id) => {
+        setRecords(prev => prev.filter(r => r.id !== id));
+        console.log(`Record ${id} deleted.`);
+    };
+
+    // --- Modal Control Functions ---
+
+    const handleOpenCreate = () => {
+        setEditingRecord(null); // Ensure modal is in Create mode
+        setIsModalOpen(true);
+    };
+
+    const handleOpenEdit = (record) => {
+        setEditingRecord(record); // Pass the data for pre-population
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingRecord(null); // Clear editing state when closing
+    };
+
+
+    return (
+        <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+                    <ClipboardList className="w-6 h-6 mr-3 text-indigo-600" />
+                    Audit Records Listing
+                </h2>
+                <button 
+                    onClick={handleOpenCreate} // Open Create Modal
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Create New Record
+                </button>
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-6">
+            <span className="font-semibold text-indigo-600">Manage Audits:</span> Use the **Edit** and **Delete** actions below to modify existing records.
+            </p>
+
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                    <tr>
+                        {['NAME', 'COORDINATORS', 'AUDITEE', 'STATUS', 'ACTIONS'].map((header) => (
+                        <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {header}
+                        </th>
+                        ))}
+                    </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                    {records.map((item) => (
+                        <tr key={item.id} className="hover:bg-indigo-50 transition duration-150">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {item.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">
+                            {item.coordinators.join(', ')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <Badge type="Auditee">{item.auditee}</Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <Badge type="Status">{item.status}</Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex space-x-3 text-gray-500">
+                                {/* 1. Edit Action - Opens Modal with data */}
+                                <button 
+                                    onClick={() => handleOpenEdit(item)}
+                                    className="text-indigo-500 hover:text-indigo-600 transition" 
+                                    title="Edit Record"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </button>
+                                {/* 2. View Action - Triggers the page change */}
+                                <button 
+                                    onClick={() => onViewDetails(item.id, item.name, item.matrixData)} 
+                                    className="text-green-500 hover:text-green-600 transition" 
+                                    title="View Decision Matrix"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                </button>
+                                {/* 3. Delete Action - Deletes the record */}
+                                <button 
+                                    onClick={() => handleDeleteRecord(item.id)}
+                                    className="text-red-500 hover:text-red-600 transition" 
+                                    title="Delete Record"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+                {records.length === 0 && (
+                    <div className="text-center py-6 text-gray-500">
+                        No audit records found. Create a new one to get started!
+                    </div>
+                )}
+            </div>
+
+            {/* The Modal Component (used for both Create and Edit) */}
+            <AuditRecordModal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                initialData={editingRecord} // Pass the data if editing, or null if creating
+                onSave={handleSaveRecord}
+            />
+        </div>
+    );
+};
+
+
+// --- Audit Schedule (Unchanged) ---
 
 /**
  * Renders the Audit Schedule view. (Content unchanged)
@@ -569,6 +829,9 @@ const AuditSchedule = () => (
     </button>
   </div>
 );
+
+
+// --- Navigation and App Components (Unchanged) ---
 
 /**
  * Navigation item component
