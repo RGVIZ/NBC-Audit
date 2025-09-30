@@ -1,1029 +1,703 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audit Records Management</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Configure Tailwind for Inter font -->
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-    </style>
-</head>
-<body>
-    <div id="root">
-        <!-- React app will render here -->
-    </div>
+import React, { useState, useEffect, useCallback } from 'react';
+import { Briefcase, CalendarCheck, ClipboardList, Pencil, CheckCircle, Trash2, Settings, Eye, ArrowLeft, Download, Upload, Plus, Save } from 'lucide-react';
 
-    <!-- 
-        MANDATORY FIX: Ensure React, ReactDOM, and Babel are loaded in this order, 
-        and before the custom script block, to define ReactDOM globally. 
-    -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+// --- Data Structures (Mock Data) ---
 
-    <!-- The React/JSX code goes here, compiled by Babel -->
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+// Line options for the dropdown
+const LINE_OPTIONS = ['Production Line', 'Assembly Line', 'Quality Check', 'Packaging', 'Shipping'];
 
-        // --- Global Mock Data and Persistence Functions ---
+// Initial Mock data for the Audit Records Listing
+const AuditRecordsData = [
+  { id: 1, name: 'Q1 Financial Review', coordinators: ['Alice Johnson', 'Bob Smith'], auditee: 'Internal', status: 'New', matrixData: [
+    { id: 101, line: 'Production Line', target: 100, actualPPM: 120, complaints: 1 },
+    { id: 102, line: 'Assembly Line', target: 50, actualPPM: 40, complaints: 0 },
+    { id: 103, line: 'Quality Check', target: 10, actualPPM: 15, complaints: 5 },
+  ]},
+  { id: 2, name: 'Vendor Security Assessment', coordinators: ['Bob Smith'], auditee: 'Supplier', status: 'New', matrixData: [] },
+  { id: 3, name: 'Marketing Compliance', coordinators: ['Diana Prince', 'Alice Johnson', 'Charlie Brown'], auditee: 'Internal', status: 'New', matrixData: [] },
+];
 
-        const STORAGE_KEY = 'auditRecordsData';
-        let uniqueIdCounter = 1000; // Counter for dynamic matrix line IDs
+// Mock data for the Audit Schedule (kept for the second tab)
+const ScheduleData = [
+  { id: 101, title: 'Annual Financial Review', startDate: '2024-10-01', endDate: '2024-10-31', status: 'In Progress', lead: 'J. Smith' },
+  { id: 102, title: 'Cloud Security Assessment', startDate: '2025-01-15', endDate: '2025-03-30', status: 'Planned', lead: 'A. Chen' },
+  { id: 103, title: 'Vendor Compliance Check', startDate: '2024-12-01', endDate: '2024-12-15', status: 'Awaiting Kickoff', lead: 'M. Lee' },
+];
 
-        const mockUsers = [
-            { id: 101, name: "Alice Johnson" },
-            { id: 102, name: "Bob Smith" },
-            { id: 103, name: "Charlie Brown" },
-            { id: 104, name: "Diana Prince" },
-        ];
-        
-        // Initial state now focuses on auditable records (the listing page content)
-        const initialAuditRecords = [
-            { id: 1, name: 'Q1 Financial Review', coordinators: [101, 102], auditeeType: 'Internal', description: 'Review of quarterly financial statements and controls.', status: 'New' },
-            { id: 2, name: 'Vendor Security Assessment', coordinators: [102], auditeeType: 'Supplier', description: 'Annual security and compliance audit for critical vendors.', status: 'New' },
-            { id: 3, name: 'Marketing Compliance', coordinators: [104, 101, 103], auditeeType: 'Internal', description: 'Review of marketing material for regulatory adherence.', status: 'New' },
-        ];
-        
-        // A placeholder function to find user names for display
-        const getCoordinatorNames = (ids) => {
-            return ids.map(id => mockUsers.find(u => u.id === id)?.name || `Unknown User (${id})`).join(', ');
-        };
+// --- Calculation Logic (Utility Functions) ---
 
+const calculateMetrics = (target, actualPPM, complaints) => {
+    target = Number(target) || 0;
+    actualPPM = Number(actualPPM) || 0;
+    complaints = Number(complaints) || 0;
 
-        // --- SVG Icons ---
+    // 1. % Change
+    const change = target === 0 ? 0 : ((actualPPM - target) / target) * 100;
+    const changeStr = `${change.toFixed(1)}%`;
 
-        const CheckSquareIcon = (props = { size: 32, color: 'currentColor', classes: '' }) => (
-          <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke={props.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-            <polyline points="9 11 12 14 22 4"></polyline>
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-          </svg>
-        );
+    // 2. % Change Rating
+    let changeRating;
+    if (change <= 0) {
+        changeRating = 5; // Excellent performance* (≤ 0%)
+    } else if (change > 0 && change < 20) {
+        changeRating = 3; // Good performance* (0% < δ < 20%)
+    } else {
+        changeRating = 1; // Poor performance* (≥ 20%)
+    }
 
-        const FileTextIcon = (props = { size: 20, color: 'currentColor', classes: '' }) => (
-          <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke={props.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-        );
+    // 3. Customer Complaints Rating
+    let complaintsRating;
+    if (complaints === 0) {
+        complaintsRating = 5; // No customer issues* (0 complaints)
+    } else if (complaints >= 1 && complaints <= 2) {
+        // Adjusted to 1-2 to avoid ambiguity with the next category starting at 3
+        complaintsRating = 3; // Minor customer issues* (1-2 complaints)
+    } else {
+        complaintsRating = 1; // Major customer issues* (≥ 3 complaints)
+    }
 
-        const CalendarIcon = (props = { size: 20, color: 'currentColor', classes: '' }) => (
-          <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke={props.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-            <path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path>
-          </svg>
-        );
+    // 4. Final Rating
+    const finalRating = changeRating * complaintsRating;
 
-        const SettingsIcon = (props = { size: 20, color: 'currentColor', classes: '' }) => (
-          <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke={props.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.19a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.23.46a2 2 0 0 0 .73 2.73l.15.08a2 2 0 0 1 1 1.73v.53a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.23.46a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.19a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.23-.46a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.52a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.23-.46a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        );
+    // 5. Frequency
+    let frequency;
+    if (finalRating >= 15) {
+        frequency = 'Annually'; // High Priority
+    } else if (finalRating >= 9 && finalRating <= 14) {
+        frequency = 'Quarterly'; // Medium Priority
+    } else {
+        frequency = 'Weekly'; // Regular Audit (≤ 8)
+    }
 
-        const EyeIcon = (props = { size: 20, classes: '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-                <path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8z"></path><circle cx="12" cy="12" r="3"></circle>
-            </svg>
-        );
-        
-        const EditIcon = (props = { size: 20, classes: '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-        );
+    return {
+        change: changeStr,
+        changeRating,
+        complaintsRating,
+        finalRating,
+        frequency,
+    };
+};
 
-        const TrashIcon = (props = { size: 20, classes: '' }) => (
-             <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-                <polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-        );
+// --- Utility Components ---
 
-        const XIcon = (props = { size: 20, classes: '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}>
-                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        );
-        
-        const ChevronDownIcon = (props = { size: 20, classes: '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}><polyline points="6 9 12 15 18 9"></polyline></svg>
-        );
+/**
+ * Renders an Auditee or Status badge with appropriate color.
+ */
+const Badge = ({ children, type }) => {
+    let colorClasses = '';
+    if (type === 'Auditee') {
+        colorClasses = children === 'Internal' ? 'bg-indigo-100 text-indigo-700' : 'bg-pink-100 text-pink-700';
+    } else if (type === 'Status') {
+        colorClasses = children === 'New' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700';
+    } else if (type === 'Frequency') {
+        colorClasses = children === 'Annually' ? 'bg-red-100 text-red-800' :
+                       children === 'Quarterly' ? 'bg-orange-100 text-orange-800' :
+                       'bg-green-100 text-green-800';
+    }
 
-        const ArrowLeftIcon = (props = { size: 20, classes: '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.classes}><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-        );
+    return (
+        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colorClasses}`}>
+            {children}
+        </span>
+    );
+};
 
-        // Navigation button helper component (Unchanged)
-        const NavButton = ({ page, currentPage, setCurrentPage, icon, label }) => {
-          const isActive = currentPage === page;
-          const baseClasses = "flex items-center w-full p-3 rounded-xl transition-all duration-200";
-          const activeClasses = "bg-indigo-600 shadow-lg text-white";
-          const inactiveClasses = "text-indigo-200 hover:bg-indigo-700/50 hover:text-white";
+// --- Row Component for Matrix Data ---
 
-          return (
-            <button
-              onClick={() => setCurrentPage(page)}
-              className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
-            >
-              {icon}
-              <span className="font-medium">{label}</span>
-            </button>
-          );
-        };
+/**
+ * Renders a single, editable row in the Audit Decision Matrix table.
+ */
+// Added initialIsEditing prop to allow new rows to start in edit mode
+const MatrixRow = ({ initialData, initialIsEditing = false, onSave, onDelete }) => {
+    const [isEditing, setIsEditing] = useState(initialIsEditing);
+    const [editData, setEditData] = useState(initialData);
 
-        // Mobile navigation button helper component (Unchanged)
-        const MobileNavButton = ({ page, currentPage, setCurrentPage, icon, label }) => {
-          const isActive = currentPage === page;
-          const baseClasses = "flex-1 flex justify-center items-center py-2 px-3 text-sm font-semibold rounded-lg transition-all";
-          const activeClasses = "bg-indigo-600 text-white";
-          const inactiveClasses = "bg-gray-200 text-gray-700 hover:bg-gray-300";
+    // Recalculate metrics whenever target, actualPPM, or complaints change
+    const metrics = calculateMetrics(editData.target, editData.actualPPM, editData.complaints);
+    
+    // Merge calculated metrics back into the row data for display
+    const rowData = { ...editData, ...metrics };
 
-          return (
-            <button
-              onClick={() => setCurrentPage(page)}
-              className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
-            >
-              {icon} {label}
-            </button>
-          );
-        };
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setEditData(prev => ({
+            ...prev,
+            [name]: name === 'target' || name === 'actualPPM' || name === 'complaints'
+                // Allow empty string ('') for empty input fields, but enforce non-negative numbers otherwise.
+                ? (value === '' ? '' : Math.max(0, Number(value))) 
+                : value
+        }));
+    };
 
-        // --- Custom Multi-Select Dropdown Component ---
-
-        const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder = "Select users..." }) => {
-            const [isOpen, setIsOpen] = useState(false);
-            const dropdownRef = React.useRef(null);
-            
-            // Function to toggle selection
-            const toggleSelection = (value) => {
-                const numValue = parseInt(value);
-                let newValues;
-                if (selectedValues.includes(numValue)) {
-                    newValues = selectedValues.filter(v => v !== numValue);
-                } else {
-                    newValues = [...selectedValues, numValue];
-                }
-                onChange(newValues);
-            };
-
-            // Close dropdown when clicking outside
-            useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                        setIsOpen(false);
-                    }
-                };
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => {
-                    document.removeEventListener("mousedown", handleClickOutside);
-                };
-            }, [dropdownRef]);
-
-
-            // Get selected user objects for displaying tags
-            const selectedUsers = selectedValues.map(id => options.find(u => u.id === id)).filter(Boolean);
-
-            return (
-                <div className="relative" ref={dropdownRef}>
-                    {/* Display Selected Tags and Toggle Button */}
-                    <div 
-                        className={`min-h-[44px] w-full border rounded-lg p-2 flex flex-wrap items-center cursor-pointer transition duration-150 ${isOpen ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-300 hover:border-indigo-400'}`}
-                        onClick={() => setIsOpen(!isOpen)}
-                    >
-                        {selectedUsers.length > 0 ? (
-                            selectedUsers.map(user => (
-                                <span 
-                                    key={user.id} 
-                                    className="flex items-center bg-indigo-100 text-indigo-800 text-xs font-medium mr-2 mb-1 mt-1 px-3 py-1 rounded-full whitespace-nowrap"
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Stop parent click from toggling dropdown
-                                        toggleSelection(user.id);
-                                    }}
-                                >
-                                    {user.name}
-                                    <XIcon size={12} classes="ml-1 cursor-pointer hover:text-indigo-900" />
-                                </span>
-                            ))
-                        ) : (
-                            <span className="text-gray-400 text-sm">{placeholder}</span>
-                        )}
-                        
-                        {/* Dropdown Indicator */}
-                        <div className="ml-auto text-gray-500 flex items-center">
-                             <ChevronDownIcon size={18} classes={`transform transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
-                        </div>
-                    </div>
-
-                    {/* Dropdown Options List */}
-                    {isOpen && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                            {options.map(option => {
-                                const isSelected = selectedValues.includes(option.id);
-                                return (
-                                    <div
-                                        key={option.id}
-                                        className={`px-4 py-2 flex justify-between items-center cursor-pointer text-sm transition duration-100 ${isSelected ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'hover:bg-gray-100 text-gray-700'}`}
-                                        onClick={() => toggleSelection(option.id)}
-                                    >
-                                        {option.name}
-                                        {isSelected && <span className="text-indigo-500"><CheckSquareIcon size={16} classes="inline" /></span>}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        // --- Create/Edit Record Modal Component ---
-
-        const CreateRecordModal = ({ show, onClose, onSave, recordToEdit }) => {
-            const isEditing = !!recordToEdit;
-            const defaultFormData = {
-                name: '',
-                coordinators: [],
-                auditeeType: 'Internal', // Default to Internal for the toggle
-                description: ''
-            };
-
-            const [formData, setFormData] = useState(isEditing ? recordToEdit : defaultFormData);
-
-            // Effect to reset form data when the modal opens or the recordToEdit changes
-            useEffect(() => {
-                if (show) {
-                    setFormData(isEditing ? recordToEdit : defaultFormData);
-                }
-            }, [show, recordToEdit]);
-
-
-            const handleChange = (e) => {
-                const { name, value } = e.target;
-                // Only handle single-value inputs here (Name, AuditeeType, Description)
-                setFormData({ ...formData, [name]: value });
-            };
-            
-            // Handler specifically for the MultiSelectDropdown's array of values
-            const handleCoordinatorChange = (newCoordinators) => {
-                setFormData({ ...formData, coordinators: newCoordinators });
-            };
-
-
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                onSave(formData);
-                setFormData(defaultFormData); // Reset form after save
-            };
-            
-            if (!show) return null;
-
-            return (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={onClose}>
-                    <div 
-                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 scale-100" 
-                        onClick={e => e.stopPropagation()} // Prevent closing when clicking inside modal
-                    >
-                        {/* Modal Header */}
-                        <div className="flex justify-between items-center p-5 border-b border-gray-200">
-                            <h3 className="text-xl font-bold text-gray-800">
-                                {isEditing ? 'Edit Audit Record' : 'Create New Audit Record'}
-                            </h3>
-                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition">
-                                <XIcon size={20} />
-                            </button>
-                        </div>
-
-                        {/* Modal Body / Form */}
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                            {/* 1. Name */}
-                            <div>
-                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    id="name"
-                                    name="name"
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    required
-                                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                    placeholder="e.g., Q4 Internal Controls Audit"
-                                />
-                            </div>
-
-                            {/* 2. Coordinators (Multi Select) - Now a modern dropdown! */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Coordinators (Multi Select)</label>
-                                <MultiSelectDropdown 
-                                    options={mockUsers}
-                                    selectedValues={formData.coordinators}
-                                    onChange={handleCoordinatorChange}
-                                    placeholder="Select one or more coordinators..."
-                                />
-                            </div>
-
-                            {/* 3. Auditee Type (Toggle/Radio Group) */}
-                            <div>
-                                <span className="block text-sm font-medium text-gray-700 mb-2">Auditee Type</span>
-                                <div className="flex space-x-4">
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="radio"
-                                            name="auditeeType"
-                                            value="Internal"
-                                            checked={formData.auditeeType === 'Internal'}
-                                            onChange={handleChange}
-                                            className="form-radio text-indigo-600 h-4 w-4"
-                                        />
-                                        <span className="text-sm text-gray-700">Internal</span>
-                                    </label>
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="radio"
-                                            name="auditeeType"
-                                            value="Supplier"
-                                            checked={formData.auditeeType === 'Supplier'}
-                                            onChange={handleChange}
-                                            className="form-radio text-indigo-600 h-4 w-4"
-                                        />
-                                        <span className="text-sm text-gray-700">Supplier</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            {/* 4. Description (Multi Line Text) */}
-                            <div>
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                <textarea
-                                    id="description"
-                                    name="description"
-                                    rows="3"
-                                    value={formData.description}
-                                    onChange={handleChange}
-                                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                                    placeholder="Provide a detailed description of the audit scope..."
-                                ></textarea>
-                            </div>
-                            
-                            {/* Submit Button */}
-                            <div className="flex justify-end pt-4 border-t border-gray-100">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="mr-3 px-4 py-2 text-sm font-semibold rounded-lg text-gray-600 hover:bg-gray-100 transition duration-150"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150"
-                                >
-                                    {isEditing ? 'Save Changes' : 'Create Record'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- Audit Records List Component (The new Listing Page) ---
-
-        // Added 'onView' prop here
-        const AuditRecordsList = ({ records, onCreateNew, onEdit, onDelete, onView }) => {
-
-            // Sets classes for the Status badge (all are 'New' for now)
-            const getStatusClasses = (status) => {
-                if (status === 'New') return 'bg-blue-100 text-blue-800 border-blue-300';
-                // Add more conditions later (e.g., 'In Progress', 'Completed')
-                return 'bg-gray-100 text-gray-800 border-gray-300';
-            }
-            
-            return (
-                <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-3xl font-bold text-gray-800 flex items-center">
-                            <FileTextIcon size={24} color="currentColor" classes="w-6 h-6 mr-3 text-indigo-600" />
-                            Audit Records Listing
-                        </h2>
-                        <button
-                            onClick={() => onCreateNew()}
-                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 flex items-center"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Create New Record
-                        </button>
-                    </div>
-                    <p className="text-gray-600 border-b pb-4">
-                        <span className="font-semibold text-indigo-700">Displaying only the latest 3 records for brevity.</span> Manage all auditable records and their associated risk profile (to be implemented).
-                    </p>
-
-                    {/* Responsive Table Layout */}
-                    <div className="overflow-x-auto bg-white rounded-xl shadow-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Coordinators</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Auditee</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {records.map(record => (
-                                    <tr key={record.id} className="hover:bg-gray-50 transition duration-100">
-                                        
-                                        {/* Name */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {record.name}
-                                        </td>
-
-                                        {/* Coordinators */}
-                                        <td className="px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">
-                                            {getCoordinatorNames(record.coordinators)}
-                                        </td>
-
-                                        {/* Auditee Type */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${record.auditeeType === 'Internal' ? 'bg-indigo-100 text-indigo-800' : 'bg-pink-100 text-pink-800'}`}>
-                                                {record.auditeeType}
-                                            </span>
-                                        </td>
-                                        
-                                        {/* Status */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusClasses(record.status)}`}>
-                                                {record.status}
-                                            </span>
-                                        </td>
-
-                                        {/* Actions (View & Edit) */}
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                            <button
-                                                onClick={() => onView(record.id)} // View Button: calls onView
-                                                className="text-indigo-600 hover:text-indigo-900 transition duration-150 p-1 rounded-full hover:bg-indigo-100"
-                                                title="View Record"
-                                            >
-                                                <EyeIcon size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => onEdit(record)}
-                                                className="text-green-600 hover:text-green-900 transition duration-150 p-1 rounded-full hover:bg-green-100"
-                                                title="Edit Record"
-                                            >
-                                                <EditIcon size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => onDelete(record.id)}
-                                                className="text-red-600 hover:text-red-900 transition duration-150 p-1 rounded-full hover:bg-red-100"
-                                                title="Delete Record"
-                                            >
-                                                <TrashIcon size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {records.length === 0 && (
-                                    <tr>
-                                        <td colSpan="5" className="text-center py-8 text-gray-500 italic">
-                                            No audit records found. Click 'Create New Record' to get started!
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- NEW: Audit Decision Matrix Component ---
-        
-        const lineOptions = [
-            { value: 10, label: 'Select Line' },
-            { value: 100, label: 'Production Line A' },
-            { value: 200, label: 'Assembly Line B' },
-            { value: 300, label: 'Quality Check C' },
-        ];
-
-        // Calculates the % Change Rating based on the criteria in the image
-        const calculatePercentRating = (target, actual) => {
-            const t = parseFloat(target);
-            const a = parseFloat(actual);
-            if (isNaN(t) || isNaN(a) || t === 0) return 0;
-
-            const percentChange = ((a - t) / t) * 100;
-
-            if (percentChange <= 0) return 5; // Excellent performance (0% or negative change)
-            if (percentChange < 20) return 3; // Good performance (0% to 19.99%)
-            return 1; // Poor performance (20% or greater)
-        };
-
-        // Calculates the Customer Complaints Rating based on the criteria in the image
-        const calculateComplaintsRating = (complaints) => {
-            const c = parseInt(complaints);
-            if (isNaN(c)) return 0;
-            
-            if (c === 0) return 5; // No customer issues
-            if (c <= 3) return 3; // Minor customer issues
-            return 1; // Major customer issues (more than 3, assuming a standard threshold)
+    const handleSave = () => {
+        // Prepare the data to be sent back to the parent component/database
+        const cleanedData = {
+            ...rowData,
+            // Convert potential empty strings back to 0 for storage/calculations
+            target: Number(rowData.target) || 0, 
+            actualPPM: Number(rowData.actualPPM) || 0,
+            complaints: Number(rowData.complaints) || 0,
         };
         
-        // Calculates the Audit Frequency based on the final rating
-        const calculateFrequency = (finalRating) => {
-            if (finalRating >= 15) return 'Annually'; // High priority audit
-            if (finalRating >= 9) return 'Quarterly'; // Medium priority (implied, using 9-14)
-            return 'Weekly'; // Regular audit (implied, using < 9)
+        // Remove the temporary 'isNew' flag used for initial editing state
+        if (cleanedData.isNew) {
+            delete cleanedData.isNew;
         }
 
-        const AuditDecisionMatrix = ({ record, onClose }) => {
-            
-            const initialMatrixData = [
-                // Mock data for demonstration purposes
-                { id: uniqueIdCounter++, line: 100, target: 100, assemblyPPM: 120, customerComplaints: 1 },
-                { id: uniqueIdCounter++, line: 200, target: 50, assemblyPPM: 40, customerComplaints: 0 },
-                { id: uniqueIdCounter++, line: 300, target: 10, assemblyPPM: 15, customerComplaints: 5 },
-            ];
+        onSave(rowData.id, cleanedData);
+        setIsEditing(false);
+    };
 
-            const [matrixLines, setMatrixLines] = useState(initialMatrixData);
-            
-            const handleAddLine = () => {
-                const newLine = { 
-                    id: uniqueIdCounter++, 
-                    line: lineOptions[0].value, // Default to 'Select Line'
-                    target: '', 
-                    assemblyPPM: '', 
-                    customerComplaints: '' 
-                };
-                setMatrixLines([...matrixLines, newLine]);
-            };
+    const handleEdit = () => {
+        setIsEditing(true);
+    };
 
-            const handleInputChange = (id, field, value) => {
-                setMatrixLines(prevLines => prevLines.map(line => 
-                    line.id === id ? { ...line, [field]: value } : line
-                ));
-            };
-
-            const handleLineDelete = (id) => {
-                 setMatrixLines(prevLines => prevLines.filter(line => line.id !== id));
-            };
-
-            return (
-                <div className="space-y-8 p-4 sm:p-0">
-                    {/* Back Button and Title */}
-                    <div className="flex items-center space-x-4 mb-6 pb-2 border-b border-gray-200">
-                        <button 
-                            onClick={onClose} 
-                            className="p-2 rounded-full text-gray-500 hover:text-indigo-600 hover:bg-gray-200 transition"
-                            title="Back to Audit Records List"
-                        >
-                            <ArrowLeftIcon size={24} />
-                        </button>
-                        <h1 className="text-3xl font-bold text-gray-800 truncate">
-                            Audit Decision Matrix: <span className="text-indigo-600">{record.name}</span>
-                        </h1>
-                    </div>
-
-                    {/* 1. Rating Guidelines Section */}
-                    <div className="bg-indigo-50 p-6 rounded-xl shadow-md border border-indigo-200">
-                        <div className="flex justify-between items-start">
-                            <h2 className="text-xl font-bold text-gray-800 mb-4">Rating Guidelines</h2>
-                            <button className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition duration-150">
-                                Configure
-                            </button>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-700 mt-2">
-                            <div>
-                                <h3 className="font-semibold text-gray-900 mb-1">\% Change Rating:</h3>
-                                <ul className="list-disc list-inside space-y-1 pl-4">
-                                    {/* FIXED: Using JSX-safe entities and simple text */}
-                                    <li className="text-green-700">**5 - Excellent performance** (&le; 0%)</li>
-                                    <li className="text-yellow-700">**3 - Good performance** (0% &lt; &Delta; &lt; 20%)</li>
-                                    <li className="text-red-700">**1 - Poor performance** (&ge; 20%)</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900 mb-1">Customer Complaints Rating:</h3>
-                                <ul className="list-disc list-inside space-y-1 pl-4">
-                                    <li className="text-green-700">**5 - No customer issues** (0 complaints)</li>
-                                    <li className="text-yellow-700">**3 - Minor customer issues** (1-3 complaints)</li>
-                                    <li className="text-red-700">**1 - Major customer issues** (&gt; 3 complaints)</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900 mb-1">Frequency Mapping:</h3>
-                                <ul className="list-disc list-inside space-y-1 pl-4">
-                                    <li className="text-indigo-700">**Annually** - Final Rating &ge; 15 (High Priority)</li>
-                                    <li className="text-indigo-700">**Quarterly** - Final Rating 9-14 (Medium Priority)</li>
-                                    <li className="text-indigo-700">**Weekly** - Final Rating &lt; 9 (Regular Audit)</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 2. Matrix Data Section */}
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold text-gray-800">Matrix Data</h2>
-                            <div className="flex space-x-2">
-                                <button className="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-gray-700 transition duration-150">
-                                    Download Import Format
-                                </button>
-                                <button className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-150">
-                                    Excel Import
-                                </button>
-                                <button 
-                                    onClick={handleAddLine}
-                                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 flex items-center"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                    Add
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Responsive Matrix Grid */}
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-300">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">LINE</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">TARGET</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">ASSEMBLY PPM</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">\% CHANGE</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">RATING</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-32">CUSTOMER COMPLAINTS</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">RATING</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">FINAL RATING</th>
-                                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">FREQUENCY</th>
-                                        <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {matrixLines.map(line => {
-                                        
-                                        const target = parseFloat(line.target) || 0;
-                                        const assemblyPPM = parseFloat(line.assemblyPPM) || 0;
-                                        const complaints = parseInt(line.customerComplaints) || 0;
-                                        
-                                        // Calculations
-                                        const percentChangeValue = (target !== 0) ? (((assemblyPPM - target) / target) * 100).toFixed(0) : '0';
-                                        const percentRating = calculatePercentRating(target, assemblyPPM);
-                                        const complaintsRating = calculateComplaintsRating(complaints);
-                                        const finalRating = percentRating * complaintsRating;
-                                        const frequency = calculateFrequency(finalRating);
-                                        
-                                        return (
-                                            <tr key={line.id}>
-                                                {/* LINE Dropdown */}
-                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                    <select
-                                                        value={line.line}
-                                                        onChange={(e) => handleInputChange(line.id, 'line', parseInt(e.target.value))}
-                                                        className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                                    >
-                                                        {lineOptions.map(opt => (
-                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </td>
-                                                {/* TARGET Input */}
-                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                    <input
-                                                        type="number"
-                                                        value={line.target}
-                                                        onChange={(e) => handleInputChange(line.id, 'target', e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg p-2 text-sm text-center focus:ring-indigo-500 focus:border-indigo-500"
-                                                    />
-                                                </td>
-                                                {/* ASSEMBLY PPM Input */}
-                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                    <input
-                                                        type="number"
-                                                        value={line.assemblyPPM}
-                                                        onChange={(e) => handleInputChange(line.id, 'assemblyPPM', e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg p-2 text-sm text-center focus:ring-indigo-500 focus:border-indigo-500"
-                                                    />
-                                                </td>
-                                                {/* % CHANGE (Calculated) */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-center text-sm font-semibold text-gray-700">
-                                                    {percentChangeValue}\%
-                                                </td>
-                                                {/* RATING (% Change) (Calculated) */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-center text-sm font-bold text-indigo-700">
-                                                    {percentRating}
-                                                </td>
-                                                {/* CUSTOMER COMPLAINTS Input */}
-                                                <td className="px-3 py-2 whitespace-nowrap">
-                                                    <input
-                                                        type="number"
-                                                        value={line.customerComplaints}
-                                                        onChange={(e) => handleInputChange(line.id, 'customerComplaints', e.target.value)}
-                                                        className="w-full border border-gray-300 rounded-lg p-2 text-sm text-center focus:ring-indigo-500 focus:border-indigo-500"
-                                                    />
-                                                </td>
-                                                {/* RATING (Complaints) (Calculated) */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-center text-sm font-bold text-indigo-700">
-                                                    {complaintsRating}
-                                                </td>
-                                                {/* FINAL RATING (Calculated) */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-center text-sm font-extrabold text-blue-700">
-                                                    {finalRating}
-                                                </td>
-                                                {/* FREQUENCY (Calculated) */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-center text-sm font-semibold">
-                                                    <span className={`px-3 py-1 rounded-full text-xs ${finalRating >= 15 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                                                        {frequency}
-                                                    </span>
-                                                </td>
-                                                {/* Delete Button */}
-                                                <td className="px-3 py-2 whitespace-nowrap text-right">
-                                                    <button 
-                                                        onClick={() => handleLineDelete(line.id)}
-                                                        className="p-1 text-red-500 hover:text-red-700 rounded-full hover:bg-red-100 transition"
-                                                        title="Remove Line"
-                                                    >
-                                                        <TrashIcon size={18} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-
-                                    {matrixLines.length === 0 && (
-                                        <tr>
-                                            <td colSpan="10" className="text-center py-6 text-gray-500 italic">
-                                                No matrix data lines added. Click '+ Add' to start assessing.
-                                            </td>
-                                        </tr>
-                                    )}
-
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                </div>
-            );
-        };
-
-        // Main application component
-        const App = () => {
-          const [currentPage, setCurrentPage] = useState('auditRecords'); // Default to the new listing page
-          const [auditRecords, setAuditRecords] = useState([]);
-          const [showModal, setShowModal] = useState(false);
-          const [editingRecord, setEditingRecord] = useState(null); // Holds the record data if we are editing
-          const [viewingRecordId, setViewingRecordId] = useState(null); // NEW: Holds the ID of the record being viewed in the Matrix page
-
-          // --- Persistence Logic (using localStorage) ---
-          
-          // Load data from localStorage on initial mount
-          useEffect(() => {
-            try {
-              const savedData = localStorage.getItem(STORAGE_KEY);
-              if (savedData) {
-                setAuditRecords(JSON.parse(savedData));
-              } else {
-                setAuditRecords(initialAuditRecords);
-              }
-            } catch (error) {
-              console.error("Could not load data from local storage:", error);
-              setAuditRecords(initialAuditRecords);
-            }
-          }, []);
-
-          // Save data to localStorage whenever auditRecords changes
-          useEffect(() => {
-            try {
-                // Only save if there's data to prevent clearing state if the initial load failed or was empty
-                if (auditRecords.length > 0 || localStorage.getItem(STORAGE_KEY)) { 
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(auditRecords));
-                }
-            } catch (error) {
-                console.error("Could not save data to local storage:", error);
-            }
-          }, [auditRecords]);
-
-          // --- CRUD Handlers ---
-
-          const handleSaveRecord = (formData) => {
-            if (editingRecord) {
-                // Update logic for existing record
-                setAuditRecords(prevRecords => prevRecords.map(record => 
-                    record.id === formData.id ? { ...formData, status: 'New' } : record
-                ));
-            } else {
-                // Create logic for new record
-                // Determine the next ID safely
-                const newId = auditRecords.length > 0 ? Math.max(...auditRecords.map(r => r.id)) + 1 : 1;
-                const newRecord = { 
-                    ...formData, 
-                    id: newId, 
-                    status: 'New' // Initial status is New
-                };
-                setAuditRecords(prevRecords => [...prevRecords, newRecord]);
-            }
-            setShowModal(false);
-            setEditingRecord(null);
-          };
-
-          const handleDeleteRecord = (id) => {
-              // NOTE: We are using a custom modal replacement instead of window.confirm/alert as per instructions.
-              // For brevity in a single file, we will use a simple console log placeholder for confirmation.
-              console.log(`Confirming deletion of record ID: ${id}. (A proper confirmation dialog should be implemented here.)`);
-              setAuditRecords(prevRecords => prevRecords.filter(record => record.id !== id));
-          };
-
-          const handleOpenCreateModal = () => {
-              setEditingRecord(null); // Ensure we are in creation mode
-              setShowModal(true);
-          };
-          
-          const handleOpenEditModal = (record) => {
-              setEditingRecord(record);
-              setShowModal(true);
-          };
-          
-          // NEW: Handler to switch to the Matrix page
-          const handleViewRecord = (id) => {
-              setViewingRecordId(id);
-              setCurrentPage('auditDecisionMatrix');
-          };
-          
-          // NEW: Handler to close the Matrix page and return to list
-          const handleCloseMatrix = () => {
-              setViewingRecordId(null);
-              setCurrentPage('auditRecords');
-          };
-
-
-          // --- Dynamic Content Rendering ---
-
-          const renderContent = () => {
-            // Find the record being viewed or edited
-            const currentRecord = auditRecords.find(r => r.id === viewingRecordId);
-
-            if (currentPage === 'auditRecords') {
-                // NEW LOGIC: Sort by ID ascending (chronological order) and slice to keep only the latest 3.
-                // We create a copy ([...auditRecords]) to avoid mutating the state directly before passing it.
-                const sortedRecords = [...auditRecords].sort((a, b) => a.id - b.id);
-                const displayRecords = sortedRecords.slice(Math.max(sortedRecords.length - 3, 0));
-
-                return (
-                  <div className="p-6 h-full overflow-y-auto">
-                    <AuditRecordsList 
-                        records={displayRecords} // Use the limited and chronologically ordered list here
-                        onCreateNew={handleOpenCreateModal}
-                        onEdit={handleOpenEditModal}
-                        onDelete={handleDeleteRecord}
-                        onView={handleViewRecord} // Pass the new view handler
-                    />
-                    <CreateRecordModal
-                        show={showModal}
-                        onClose={() => setShowModal(false)}
-                        onSave={handleSaveRecord}
-                        recordToEdit={editingRecord}
-                    />
-                  </div>
-                );
-            } else if (currentPage === 'auditDecisionMatrix' && currentRecord) {
-                 return (
-                    <div className="p-4 md:p-0 h-full overflow-y-auto">
-                        <AuditDecisionMatrix
-                            record={currentRecord}
-                            onClose={handleCloseMatrix}
-                        />
-                    </div>
-                );
-            } else if (currentPage === 'auditSchedule') {
-                // Keeping the auditSchedule placeholder for future use
-                return (
-                  <div className="p-6 bg-white rounded-xl shadow-lg h-full overflow-y-auto">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
-                      <CalendarIcon size={24} color="currentColor" classes="w-6 h-6 mr-3 text-green-600" />
-                      Audit Schedule
-                    </h2>
-                    <p className="text-gray-600 mb-6 border-b pb-4">
-                      This page will allow you to assign auditors and set specific dates for the records managed on the Audit Records page.
-                    </p>
-                    <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                      <h3 className="font-semibold text-green-800 mb-2">Total Records Available for Scheduling:</h3>
-                      <ul className="list-disc list-inside text-sm text-green-700 space-y-2">
-                        {/* Audit Records list here still uses the full list, which is fine for a schedule view */}
-                        {auditRecords.map(item => (
-                            <li key={item.id}>
-                              **{item.name}** (Auditee: {item.auditeeType}, Status: {item.status})
-                            </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                );
-            } else if (currentPage === 'settings') {
-                return (
-                  <div className="p-6 bg-white rounded-xl shadow-lg h-full overflow-y-auto">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-4 flex items-center">
-                      <SettingsIcon size={24} color="currentColor" classes="w-6 h-6 mr-3 text-gray-600" />
-                      Application Settings
-                    </h2>
-                    <p className="text-gray-600">Placeholder for global application configuration.</p>
-                  </div>
-                );
-            }
-            return (
-                 <div className="p-6 h-full overflow-y-auto">
-                    <h2 className="text-xl font-bold text-red-500">Error: No Record Selected or Page Not Found</h2>
-                    <button 
-                        onClick={handleCloseMatrix}
-                        className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition"
+    return (
+        <tr className="hover:bg-gray-50 transition duration-150">
+            {/* 1. LINE (Dropdown/Text) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                {isEditing ? (
+                    <select
+                        name="line"
+                        value={editData.line}
+                        onChange={handleChange}
+                        className="p-1 border border-gray-300 rounded-md w-full focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                        Go to Records List
+                        {LINE_OPTIONS.map(line => (
+                            <option key={line} value={line}>{line}</option>
+                        ))}
+                    </select>
+                ) : (
+                    rowData.line
+                )}
+            </td>
+
+            {/* 2. TARGET (Numeric Input) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                {isEditing ? (
+                    <input
+                        type="number"
+                        name="target"
+                        value={editData.target}
+                        onChange={handleChange}
+                        min="0"
+                        placeholder="0"
+                        className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                ) : (
+                    rowData.target
+                )}
+            </td>
+
+            {/* 3. ASSEMBLY PPM (Numeric Input) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                {isEditing ? (
+                    <input
+                        type="number"
+                        name="actualPPM"
+                        value={editData.actualPPM}
+                        onChange={handleChange}
+                        min="0"
+                        placeholder="0"
+                        className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                ) : (
+                    rowData.actualPPM
+                )}
+            </td>
+
+            {/* 4. % CHANGE (Auto Calculate) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm font-semibold text-indigo-600">
+                {rowData.change}
+            </td>
+
+            {/* 5. RATING (% Change) (Auto Calculate) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-center">
+                {rowData.changeRating}
+            </td>
+
+            {/* 6. CUSTOMER COMPLAINTS (Numeric Input) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                {isEditing ? (
+                    <input
+                        type="number"
+                        name="complaints"
+                        value={editData.complaints}
+                        onChange={handleChange}
+                        min="0"
+                        placeholder="0"
+                        className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                ) : (
+                    rowData.complaints
+                )}
+            </td>
+
+            {/* 7. RATING (Complaints) (Auto Calculate) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-center">
+                {rowData.complaintsRating}
+            </td>
+
+            {/* 8. FINAL RATING (Auto Calculate) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-extrabold text-center">
+                {rowData.finalRating}
+            </td>
+
+            {/* 9. FREQUENCY (Auto Calculate) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
+                <Badge type="Frequency">{rowData.frequency}</Badge>
+            </td>
+
+            {/* 10. ACTIONS (Edit/Save & Delete) */}
+            <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-center">
+                <div className="flex space-x-3 justify-center">
+                    {isEditing ? (
+                        <button 
+                            onClick={handleSave} 
+                            className="text-green-500 hover:text-green-600 transition p-1 rounded-full hover:bg-green-50" 
+                            title="Save Row"
+                        >
+                            <Save className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={handleEdit} 
+                            className="text-indigo-500 hover:text-indigo-600 transition p-1 rounded-full hover:bg-indigo-50" 
+                            title="Edit Row"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => onDelete(rowData.id)} 
+                        className="text-red-500 hover:text-red-600 transition p-1 rounded-full hover:bg-red-50" 
+                        title="Delete Row"
+                    >
+                        <Trash2 className="w-4 h-4" />
                     </button>
-                 </div>
-            );
-          };
-
-          // --- Main Layout (Updated Sidebar) ---
-
-          return (
-            <div className="min-h-screen bg-gray-100 flex font-sans antialiased">
-              
-              {/* 1. Sidebar Navigation (Desktop) */}
-              <aside className="w-64 bg-indigo-900 text-white flex-shrink-0 p-4 shadow-2xl hidden md:flex flex-col">
-                <div className="flex items-center mb-10 mt-4 px-2">
-                  <CheckSquareIcon size={32} color="#9fa8da" classes="mr-3" />
-                  <h1 className="text-xl font-extrabold tracking-wider">Audit Planner</h1>
                 </div>
+            </td>
+        </tr>
+    );
+};
 
-                <nav className="space-y-2 flex-grow">
-                  <NavButton
-                    page="auditRecords"
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    icon={<FileTextIcon size={20} color="currentColor" classes="w-5 h-5 mr-3" />}
-                    label="Audit Records"
-                  />
-                  <NavButton
-                    page="auditSchedule"
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    icon={<CalendarIcon size={20} color="currentColor" classes="w-5 h-5 mr-3" />}
-                    label="Audit Schedule"
-                  />
-                </nav>
 
-                <div className="border-t border-indigo-700 pt-4 mt-auto">
-                  <NavButton
-                    page="settings"
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    icon={<SettingsIcon size={20} color="currentColor" classes="w-5 h-5 mr-3" />}
-                    label="Settings"
-                  />
-                </div>
-              </aside>
+// --- Main View Components ---
 
-              {/* 2. Main Content Area */}
-              <main className="flex-grow p-4 md:p-8 overflow-y-auto">
-                
-                {/* Mobile Header/Navigation (Visible only on small screens) */}
-                <header className="md:hidden bg-white p-4 rounded-xl shadow-lg mb-6">
-                    <h1 className="text-xl font-bold text-gray-800 mb-3 flex items-center">
-                        <CheckSquareIcon size={24} color="currentColor" classes="w-6 h-6 text-indigo-600 mr-2" />
-                        Audit Planner
-                    </h1>
-                    <div className="flex space-x-2">
-                        <MobileNavButton
-                            page="auditRecords"
-                            currentPage={currentPage}
-                            setCurrentPage={setCurrentPage}
-                            icon={<FileTextIcon size={16} color="currentColor" classes="w-4 h-4 mr-1" />}
-                            label="Records"
-                        />
-                        <MobileNavButton
-                            page="auditSchedule"
-                            currentPage={currentPage}
-                            setCurrentPage={setCurrentPage}
-                            icon={<CalendarIcon size={16} color="currentColor" classes="w-4 h-4 mr-1" />}
-                            label="Schedule"
-                        />
-                    </div>
-                </header>
+/**
+ * Renders the detailed Audit Decision Matrix for a specific record.
+ * @param {object} props
+ * @param {string} props.auditName - The name of the audit (e.g., 'Q1 Financial Review')
+ * @param {function} props.onBack - Function to return to the listing page
+ * @param {object[]} props.initialMatrixData - The initial matrix data for this audit
+ */
+const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => {
+    // State for the matrix data rows
+    const [matrixData, setMatrixData] = useState(initialMatrixData || []);
+    // Ensure nextId starts higher than existing IDs (including those in matrixData, or 1 if empty)
+    const [nextId, setNextId] = useState(
+        (initialMatrixData && initialMatrixData.length > 0) 
+            ? Math.max(...initialMatrixData.map(d => d.id)) + 1 
+            : 1
+    );
 
-                {/* Dynamic Content */}
-                <div className="h-full">
-                    {renderContent()}
-                </div>
-              </main>
-            </div>
-          );
+    const handleSaveRow = useCallback((id, updatedData) => {
+        // Destructure and remove the temporary 'isNew' flag from the data object
+        const { isNew, ...dataToSave } = updatedData;
+
+        setMatrixData(prev => prev.map(row => 
+            row.id === id 
+                ? { ...dataToSave } // Save the cleaned data without 'isNew'
+                : row
+        ));
+        // In a real app, you would send dataToSave to Firestore here.
+        console.log(`Row ${id} saved:`, dataToSave);
+    }, []);
+
+    const handleDeleteRow = useCallback((id) => {
+        setMatrixData(prev => prev.filter(row => row.id !== id));
+        // In a real app, you would delete the record in Firestore here.
+        console.log(`Row ${id} deleted.`);
+    }, []);
+    
+    const handleAddRow = () => {
+        const newRow = {
+            id: nextId,
+            line: LINE_OPTIONS[0],
+            target: '', // Empty string to show an empty field
+            actualPPM: '', // Empty string to show an empty field
+            complaints: '', // Empty string to show an empty field
+            isNew: true, // Flag to indicate this row should start in edit mode
         };
+        setMatrixData(prev => [...prev, newRow]);
+        setNextId(prev => prev + 1);
+        // In a real app, you would add the new record to Firestore here.
+        console.log('New row added:', newRow);
+    };
 
-        // Render the main application component
-        // This is the correct React 18 syntax that requires ReactDOM to be loaded first.
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-</body>
-</html>
+    // Helper for table rendering
+    const tableHeaders = ['LINE', 'TARGET', 'ASSEMBLY PPM', '% CHANGE', 'RATING', 'CUSTOMER COMPLAINTS', 'RATING', 'FINAL RATING', 'FREQUENCY', 'ACTIONS'];
+
+
+    return (
+        <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+            {/* Header with Back Button */}
+            <div className="flex items-center mb-6 pb-4 border-b">
+                <button onClick={onBack} className="text-gray-500 hover:text-indigo-600 transition mr-4 p-2 rounded-full hover:bg-gray-100">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+                <h2 className="text-2xl font-bold text-gray-800 flex-1">
+                    Audit Decision Matrix: <span className="text-indigo-600">{auditName}</span>
+                </h2>
+            </div>
+
+            {/* Rating Guidelines Section */}
+            <div className="bg-indigo-50 p-6 rounded-xl mb-8 relative">
+                <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-xl font-semibold text-gray-800">Rating Guidelines</h3>
+                    <button className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
+                        Configure
+                    </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                    <div>
+                        <h4 className="font-bold text-gray-700 mb-2">% Change Rating:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600">
+                            {/* Guidelines for % Change Rating */}
+                            <li>**5** - Excellent performance* (&le; 0%)</li>
+                            <li>**3** - Good performance* (0% &lt; &delta; &lt; 20%)</li>
+                            <li className="text-red-600">**1** - Poor performance* (&ge; 20%)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-700 mb-2">Customer Complaints Rating:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600">
+                            {/* Guidelines for Complaint Rating (Adjusted to be non-ambiguous: 1-2 for rating 3) */}
+                            <li>**5** - No customer issues* (0 complaints)</li>
+                            <li>**3** - Minor customer issues* (1-2 complaints)</li>
+                            <li className="text-red-600">**1** - Major customer issues* (&ge; 3 complaints)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-700 mb-2">Frequency Mapping:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600">
+                            {/* Guidelines for Final Rating to Frequency Mapping */}
+                            <li>**Annually** - Final Rating &ge; 15 (High Priority)</li>
+                            <li>**Quarterly** - Final Rating 9-14 (Medium Priority)</li>
+                            <li>**Weekly** - Final Rating &le; 8 (Regular Audit)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            {/* Matrix Data Section */}
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Matrix Data</h3>
+            
+            <div className="flex flex-col sm:flex-row justify-end sm:justify-between items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
+                <input 
+                    type="text" 
+                    placeholder="Search..."
+                    className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
+                />
+                <div className="flex space-x-3 w-full sm:w-auto">
+                    <button className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        <Download className="w-4 h-4 mr-2" /> Download Import Format
+                    </button>
+                    <button className="flex items-center px-3 py-2 text-sm text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition font-medium">
+                        <Upload className="w-4 h-4 mr-2" /> Excel Import
+                    </button>
+                    <button 
+                        onClick={handleAddRow}
+                        className="flex items-center px-3 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition font-medium"
+                    >
+                        <Plus className="w-4 h-4 mr-1" /> Add
+                    </button>
+                </div>
+            </div>
+
+            {/* Data Table */}
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            {tableHeaders.map((header, index) => (
+                                <th key={index} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    {header}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {matrixData.map((item) => (
+                            <MatrixRow
+                                key={item.id}
+                                // If the item has the 'isNew' flag, start it in edit mode
+                                initialIsEditing={!!item.isNew} 
+                                initialData={item}
+                                onSave={handleSaveRow}
+                                onDelete={handleDeleteRow}
+                            />
+                        ))}
+                        {matrixData.length === 0 && (
+                            <tr>
+                                <td colSpan={10} className="text-center py-6 text-gray-500">
+                                    No matrix data available. Click 'Add' to start.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            
+        </div>
+    );
+};
+
+
+/**
+ * Renders the Audit Records Listing view.
+ * @param {object} props
+ * @param {function} props.onViewDetails - Function to navigate to the detail page
+ */
+const AuditRecordsListing = ({ onViewDetails }) => (
+  <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+    <div className="flex justify-between items-center mb-6 border-b pb-4">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+            <ClipboardList className="w-6 h-6 mr-3 text-indigo-600" />
+            Audit Records Listing
+        </h2>
+        <button className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
+            <Pencil className="w-4 h-4 mr-2" />
+            Create New Record
+        </button>
+    </div>
+    
+    <p className="text-sm text-gray-600 mb-6">
+      <span className="font-semibold text-indigo-600">Displaying only the latest 3 records for brevity.</span> Manage all auditable records and their associated risk profile (to be implemented).
+    </p>
+
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            {['NAME', 'COORDINATORS', 'AUDITEE', 'STATUS', 'ACTIONS'].map((header) => (
+              <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {AuditRecordsData.map((item) => (
+            <tr key={item.id} className="hover:bg-indigo-50 transition duration-150">
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {item.name}
+              </td>
+              <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">
+                {item.coordinators.join(', ')}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <Badge type="Auditee">{item.auditee}</Badge>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <Badge type="Status">{item.status}</Badge>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <div className="flex space-x-3 text-gray-500">
+                    {/* 1. Edit Action */}
+                    <button className="text-indigo-500 hover:text-indigo-600 transition" title="Edit Record">
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    {/* 2. View Action - Triggers the page change */}
+                    <button 
+                        onClick={() => onViewDetails(item.id, item.name, item.matrixData)} 
+                        className="text-green-500 hover:text-green-600 transition" 
+                        title="View Details"
+                    >
+                        <Eye className="w-4 h-4" />
+                    </button>
+                    {/* 3. Delete Action */}
+                    <button className="text-red-500 hover:text-red-600 transition" title="Delete Record">
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+/**
+ * Renders the Audit Schedule view. (Content unchanged)
+ */
+const AuditSchedule = () => (
+  <div className="p-6 bg-white rounded-xl shadow-lg">
+    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Audit Schedule</h2>
+    <p className="text-gray-600 mb-4">
+      Upcoming and ongoing audit projects with key dates and status updates.
+    </p>
+
+    <div className="space-y-4">
+      {ScheduleData.map((audit) => (
+        <div key={audit.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-100 rounded-lg hover:border-indigo-400 transition duration-150 ease-in-out">
+          <div className="flex-1 min-w-0 mb-2 sm:mb-0">
+            <p className="text-lg font-semibold text-gray-900 truncate">{audit.title}</p>
+            <p className="text-sm text-gray-500">Lead: {audit.lead}</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="text-sm font-medium text-gray-700">Dates</p>
+              <p className="text-xs text-gray-500">{audit.startDate} - {audit.endDate}</p>
+            </div>
+            <span className={`px-4 py-1.5 inline-flex text-sm leading-5 font-semibold rounded-full ${
+              audit.status === 'In Progress' ? 'bg-indigo-100 text-indigo-800' :
+              audit.status === 'Planned' ? 'bg-green-100 text-green-800' :
+              'bg-yellow-100 text-yellow-800'
+            }`}>
+              {audit.status}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+    <button className="mt-6 w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
+        Add New Audit
+    </button>
+  </div>
+);
+
+/**
+ * Navigation item component
+ */
+const NavItem = ({ icon: Icon, label, isActive, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`
+      flex items-center w-full px-4 py-3 rounded-xl transition duration-200 ease-in-out
+      ${isActive
+        ? 'bg-white/20 text-white' 
+        : 'text-indigo-200 hover:bg-white/10'
+      }
+    `}
+  >
+    <Icon className="w-5 h-5 mr-3" />
+    <span className="font-medium">{label}</span>
+  </button>
+);
+
+/**
+ * Main application component, handling navigation logic.
+ */
+const App = () => {
+  // State to manage the active main view ('Records', 'Schedule', or 'Detail')
+  const [activeView, setActiveView] = useState('Records'); 
+  // State to hold data for the currently viewed record detail
+  const [currentAudit, setCurrentAudit] = useState(null); 
+
+  // Function to navigate to the detailed matrix view
+  const handleViewDetails = (id, name, matrixData) => {
+    setCurrentAudit({ id, name, matrixData });
+    setActiveView('Detail');
+  };
+
+  // Function to navigate back to the listing view
+  const handleBackToListing = () => {
+    setCurrentAudit(null);
+    setActiveView('Records');
+  };
+
+  // Function to render the correct content component
+  const renderContent = () => {
+    switch (activeView) {
+      case 'Records':
+        return <AuditRecordsListing onViewDetails={handleViewDetails} />;
+      case 'Schedule':
+        return <AuditSchedule />;
+      case 'Detail':
+        // Ensure we have data before rendering the detail page
+        if (currentAudit) {
+            return (
+                <AuditDecisionMatrixDetail 
+                    auditName={currentAudit.name} 
+                    initialMatrixData={currentAudit.matrixData}
+                    onBack={handleBackToListing} 
+                />
+            );
+        }
+        return <AuditRecordsListing onViewDetails={handleViewDetails} />; // Fallback
+      default:
+        return <AuditRecordsListing onViewDetails={handleViewDetails} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex" style={{ fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* 1. Sidebar Navigation (Modified to match the screenshot's dark purple style) */}
+      <nav className="hidden md:flex flex-col w-64 bg-indigo-900 p-4 shadow-2xl">
+        <div className="flex items-center text-white text-xl font-bold mb-10 tracking-wider h-16 border-b border-white/10">
+            <CheckCircle className="w-6 h-6 mr-2 text-green-400" />
+            Audit Planner
+        </div>
+
+        <div className="space-y-2 flex-1">
+          <NavItem
+            icon={ClipboardList}
+            label="Audit Records"
+            isActive={activeView === 'Records' || activeView === 'Detail'} // Highlight Records when viewing a detail
+            onClick={handleBackToListing} // Clicking records takes you back to the list
+          />
+          <NavItem
+            icon={CalendarCheck}
+            label="Audit Schedule"
+            isActive={activeView === 'Schedule'}
+            onClick={() => setActiveView('Schedule')}
+          />
+        </div>
+
+        {/* Settings button at the bottom */}
+        <div className="pt-4 border-t border-white/10">
+             <button className="flex items-center w-full px-4 py-3 rounded-xl text-indigo-200 hover:bg-white/10 transition">
+                <Settings className="w-5 h-5 mr-3" />
+                <span className="font-medium">Settings</span>
+            </button>
+        </div>
+      </nav>
+
+      {/* 2. Main Content Area */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+        
+        {/* Mobile Header/Navigation */}
+        <header className="md:hidden sticky top-0 z-10 bg-white p-4 mb-4 rounded-xl shadow-md">
+          <h1 className="text-xl font-bold text-gray-800 mb-3">Audit Planner</h1>
+          <div className="flex space-x-2">
+             <button
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition ${activeView === 'Records' || activeView === 'Detail' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={handleBackToListing}
+            >
+                Audit Records
+            </button>
+            <button
+                className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition ${activeView === 'Schedule' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                onClick={() => setActiveView('Schedule')}
+            >
+                Audit Schedule
+            </button>
+          </div>
+        </header>
+
+        <div className="w-full max-w-7xl mx-auto">
+          {/* Render the active content view */}
+          {renderContent()}
+        </div>
+
+      </main>
+    </div>
+  );
+};
+
+export default App;
