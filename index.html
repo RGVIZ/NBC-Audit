@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <!-- Load React and ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Load Babel for on-the-fly JSX compilation in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -37,14 +37,27 @@
     <script type="text/babel">
         const { useState, useEffect, useCallback } = React;
 
-        // --- Data Structures ---
+        // --- Constants and Configuration ---
         const LINE_OPTIONS = ['Production Line', 'Assembly Line', 'Quality Check', 'Packaging', 'Shipping'];
         const MOCK_COORDINATORS = [
             'Alice Johnson', 'Bob Smith', 'Charlie Brown', 'Diana Prince', 'Evan Ross',
             'Fiona Green', 'George Harris', 'Hannah Lee'
         ];
         
-        // Initial Mock data for the Audit Records Listing
+        // Configuration options for the modal (static lookups)
+        const OPERATION_OPTIONS = [
+            { symbol: '>=', label: 'Greater than or Equal to' },
+            { symbol: '<=', label: 'Less than or Equal to' },
+            { symbol: '>', label: 'Greater than' },
+            { symbol: '<', label: 'Less than' },
+            { symbol: '=', label: 'Equal to' },
+            { symbol: 'Between', label: 'Between' },
+        ];
+
+        const FREQUENCY_OPTIONS = ['Annually', 'Quarterly', 'Weekly', 'Daily'];
+
+
+        // Mock data for the Audit Records Listing
         const initialAuditRecordsData = [
           { id: 1, name: 'Q1 Financial Review', coordinators: ['Alice Johnson', 'Bob Smith'], auditee: 'Internal', status: 'New', description: 'Review of financial statements and compliance measures for the first quarter.', matrixData: [
             { id: 101, line: 'Production Line', target: 100, actualPPM: 120, complaints: 1 },
@@ -62,8 +75,33 @@
           { id: 103, title: 'Vendor Compliance Check', startDate: '2024-12-01', endDate: '2024-12-15', status: 'Awaiting Kickoff', lead: 'M. Lee' },
         ];
 
+        // Initial Configuration State (Matching the logic in calculateMetrics)
+        const initialConfig = {
+            // 1. % Change Rating Rules
+            percentChangeRating: [
+                { id: 1, rating: 5, operation: '<=', value: 0, description: 'Excellent performance' },
+                { id: 2, rating: 3, operation: 'Between', value: '0% - 20%', description: 'Good performance' },
+                { id: 3, rating: 1, operation: '>', value: 20, description: 'Poor performance' },
+            ],
+            // 2. Customer Complaints Rating Rules
+            customerComplaintsRating: [
+                { id: 1, rating: 5, operation: '=', value: 0, description: 'No customer issues' },
+                { id: 2, rating: 3, operation: 'Between', value: '1 - 2', description: 'Minor customer issues' },
+                { id: 3, rating: 1, operation: '>=', value: 3, description: 'Major customer issues' },
+            ],
+            // 3. Frequency Mapping Rules
+            frequencyMapping: [
+                { id: 1, times: 'Annually', operation: '>=', finalRating: 15, description: 'High Priority', highlight: 'bg-red-500' },
+                { id: 2, times: 'Quarterly', operation: 'Between', finalRating: '9 - 14', description: 'Medium Priority', highlight: 'bg-orange-500' },
+                { id: 3, times: 'Weekly', operation: '<=', finalRating: 8, description: 'Regular Audit', highlight: 'bg-green-500' },
+            ]
+        };
+        
         // --- Calculation Logic (Utility Functions) ---
 
+        /**
+         * Finds the appropriate rating based on a list of rules and the input value.
+         */
         const calculateMetrics = (target, actualPPM, complaints) => {
             target = Number(target) || 0;
             actualPPM = Number(actualPPM) || 0;
@@ -73,7 +111,7 @@
             const change = target === 0 ? 0 : ((actualPPM - target) / target) * 100;
             const changeStr = `${change.toFixed(1)}%`;
 
-            // 2. % Change Rating
+            // 2. % Change Rating (Based on initial hardcoded logic)
             let changeRating;
             if (change <= 0) {
                 changeRating = 5; 
@@ -83,7 +121,7 @@
                 changeRating = 1; 
             }
 
-            // 3. Customer Complaints Rating
+            // 3. Customer Complaints Rating (Based on initial hardcoded logic)
             let complaintsRating;
             if (complaints === 0) {
                 complaintsRating = 5; 
@@ -96,7 +134,7 @@
             // 4. Final Rating
             const finalRating = changeRating * complaintsRating;
 
-            // 5. Frequency
+            // 5. Frequency (Based on initial hardcoded logic)
             let frequency;
             if (finalRating >= 15) {
                 frequency = 'Annually'; 
@@ -115,7 +153,7 @@
             };
         };
 
-        // --- Utility Components ---
+        // --- Utility Components & Modals (Defined FIRST to prevent ReferenceError) ---
 
         /**
          * Renders an Auditee or Status badge with appropriate color.
@@ -138,27 +176,27 @@
                 </span>
             );
         };
-
-        // --- Modal Component for Creating/Editing Audits ---
-
+        
+        // Lucide Icons
+        const X = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
+        const Save = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-save"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+        const Pencil = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-pencil"><path d="M17 3a2.85 2.85 0 0 0-4 0L7 13v4h4l10-10a2.85 2.85 0 0 0 0-4z"/><path d="M15 5 19 9"/></svg>;
+        const Trash2 = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
+        const Plus = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+        
+        /**
+         * Modal for creating or editing an Audit Record. (Fixes ReferenceError)
+         */
         const AuditRecordModal = ({ isOpen, onClose, initialData, onSave }) => {
-            const isEditing = !!initialData?.id;
+            const defaultData = { name: '', coordinators: [], auditee: 'Internal', status: 'New', description: '', matrixData: [] };
+            const [formData, setFormData] = useState(initialData || defaultData);
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const isEditMode = !!initialData; // Determine if we are editing or creating
 
-            // Initial form state based on whether we are editing or creating
-            const getInitialState = useCallback(() => ({
-                name: initialData?.name || '',
-                coordinators: initialData?.coordinators || [],
-                auditee: initialData?.auditee || 'Internal',
-                description: initialData?.description || '',
-            }), [initialData]);
-
-            const [formData, setFormData] = useState(getInitialState);
-            const [isCoordDropdownOpen, setIsCoordDropdownOpen] = useState(false);
-
-            // Effect to reset state when initialData changes 
             useEffect(() => {
-                setFormData(getInitialState());
-            }, [initialData, getInitialState]);
+                // Reset form when the modal opens or initialData changes
+                setFormData(initialData || defaultData);
+            }, [initialData, isOpen]);
 
             if (!isOpen) return null;
 
@@ -167,10 +205,13 @@
                 setFormData(prev => ({ ...prev, [name]: value }));
             };
 
-            const handleAuditeeToggle = (auditeeType) => {
-                setFormData(prev => ({ ...prev, auditee: auditeeType }));
+            const handleAuditeeToggle = () => {
+                setFormData(prev => ({
+                    ...prev,
+                    auditee: prev.auditee === 'Internal' ? 'Supplier' : 'Internal'
+                }));
             };
-            
+
             const handleCoordinatorToggle = (coordinator) => {
                 setFormData(prev => {
                     const currentCoords = prev.coordinators;
@@ -184,42 +225,36 @@
 
             const handleSubmit = (e) => {
                 e.preventDefault();
+                // Basic validation
+                if (!formData.name || formData.coordinators.length === 0) {
+                    console.error("Name and at least one coordinator are required.");
+                    return;
+                }
                 
-                // Pass the ID if it exists (for editing)
-                const recordToSave = isEditing 
-                    ? { ...initialData, ...formData }
-                    : { ...formData, status: 'New', matrixData: [] };
-
-                onSave(recordToSave);
-                onClose(); // Close the modal upon successful operation
+                // Pass the data up for saving/updating
+                onSave(formData);
+                onClose();
             };
-
-            // Lucide Icons (imported directly as SVG paths in the original component, but we use the library names here)
-            const Save = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-save"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
-            const Plus = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-            const ChevronDown = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>;
-            const Check = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-check"><path d="M20 6 9 17l-5-5"/></svg>;
-
 
             return (
                 <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 transition-opacity">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg transition-transform transform scale-100">
                         
                         {/* Modal Header */}
-                        <div className="px-6 py-4 border-b">
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
                             <h3 className="text-xl font-bold text-gray-800">
-                                {isEditing ? `Edit Audit Record: ${initialData.name}` : 'Create New Audit Record'}
+                                {isEditMode ? 'Edit Audit Record' : 'Create New Audit Record'}
                             </h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition">
+                                <X className="w-6 h-6" />
+                            </button>
                         </div>
 
                         {/* Modal Body (Form) */}
                         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                            
-                            {/* 1. Name */}
+                            {/* Record Name */}
                             <div>
-                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Name
-                                </label>
+                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Record Name</label>
                                 <input
                                     type="text"
                                     name="name"
@@ -227,93 +262,85 @@
                                     value={formData.name}
                                     onChange={handleChange}
                                     required
-                                    placeholder="e.g., Q3 Production Safety Audit"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="e.g., Q1 Financial Review"
                                 />
                             </div>
 
-                            {/* 2. Coordinator (Multi Select User Dropdown) */}
+                            {/* Description */}
+                            <div>
+                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea
+                                    name="description"
+                                    id="description"
+                                    rows="3"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="Provide a brief summary of the audit scope..."
+                                />
+                            </div>
+
+                            {/* Coordinator Multi-Select */}
                             <div className="relative">
-                                <label htmlFor="coordinator" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Coordinator(s)
-                                </label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Coordinators</label>
                                 <button
                                     type="button"
-                                    onClick={() => setIsCoordDropdownOpen(!isCoordDropdownOpen)}
-                                    className="w-full text-left flex items-center justify-between px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition"
+                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    className="w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 flex justify-between items-center"
                                 >
-                                    <span className={`truncate ${formData.coordinators.length > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                                        {formData.coordinators.length > 0 
-                                            ? formData.coordinators.join(', ')
-                                            : 'Select one or more coordinators'
-                                        }
+                                    <span className="truncate text-sm">
+                                        {formData.coordinators.length > 0 ? formData.coordinators.join(', ') : 'Select one or more coordinators'}
                                     </span>
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transform transition-transform ${isCoordDropdownOpen ? 'rotate-180' : 'rotate-0'}`} />
+                                    <svg className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
                                 </button>
-                                
-                                {isCoordDropdownOpen && (
-                                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                {isDropdownOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
                                         {MOCK_COORDINATORS.map(coord => (
-                                            <div 
-                                                key={coord} 
-                                                className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-indigo-50"
+                                            <div
+                                                key={coord}
                                                 onClick={() => handleCoordinatorToggle(coord)}
+                                                className={`px-4 py-2 cursor-pointer text-sm hover:bg-indigo-50 transition ${formData.coordinators.includes(coord) ? 'bg-indigo-100 font-semibold' : ''}`}
                                             >
-                                                <span>{coord}</span>
-                                                {formData.coordinators.includes(coord) && (
-                                                    <Check className="w-4 h-4 text-indigo-600" />
-                                                )}
+                                                {coord}
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
 
-                            {/* 3. Auditee (Toggle) */}
+                            {/* Auditee Toggle */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Auditee
-                                </label>
-                                <div className="inline-flex rounded-lg shadow-sm border border-gray-200 p-0.5 bg-gray-50">
-                                    {['Internal', 'Supplier'].map(type => (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            onClick={() => handleAuditeeToggle(type)}
-                                            className={`
-                                                px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-150
-                                                ${formData.auditee === type
-                                                    ? 'bg-indigo-600 text-white shadow-md'
-                                                    : 'text-gray-600 hover:bg-white'
-                                                }
-                                            `}
-                                        >
-                                            {type}
-                                        </button>
-                                    ))}
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Auditee Type</label>
+                                <div className="flex items-center space-x-4">
+                                    <button
+                                        type="button"
+                                        onClick={handleAuditeeToggle}
+                                        className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                            formData.auditee === 'Internal'
+                                                ? 'bg-indigo-600 text-white shadow-md'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Internal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleAuditeeToggle}
+                                        className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                            formData.auditee === 'Supplier'
+                                                ? 'bg-pink-600 text-white shadow-md'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Supplier/External
+                                    </button>
                                 </div>
                             </div>
-                            
-                            {/* 4. Description */}
-                            <div>
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                                    Description
-                                </label>
-                                <textarea
-                                    name="description"
-                                    id="description"
-                                    rows="4"
-                                    value={formData.description}
-                                    onChange={handleChange}
-                                    placeholder="Provide a brief summary of the audit's scope and objectives."
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition"
-                                />
-                            </div>
-
                         </form>
 
                         {/* Modal Footer */}
-                        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl">
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl border-t">
                             <button
                                 type="button"
                                 onClick={onClose}
@@ -326,11 +353,7 @@
                                 onClick={handleSubmit}
                                 className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
                             >
-                                {isEditing ? (
-                                    <><Save className="w-4 h-4 inline mr-1" /> Save Changes</>
-                                ) : (
-                                    <><Plus className="w-4 h-4 inline mr-1" /> Create Record</>
-                                )}
+                                <Save className="w-4 h-4 inline mr-1" /> {isEditMode ? 'Update Record' : 'Create Record'}
                             </button>
                         </div>
                     </div>
@@ -338,9 +361,232 @@
             );
         };
 
+        /**
+         * Component for the Rating Configuration Modal.
+         */
+        const RatingConfigModal = ({ isOpen, onClose, initialConfig, onSaveConfig }) => {
+            // State for the configuration data within the modal
+            const [config, setConfig] = useState(initialConfig);
 
-        // --- Row Component for Matrix Data ---
+            useEffect(() => {
+                if (isOpen) {
+                    // Reset or initialize state when modal opens
+                    setConfig(initialConfig);
+                }
+            }, [isOpen, initialConfig]);
 
+            if (!isOpen) return null;
+            
+            // Helper function to find the label for an operation symbol
+            const getOperationLabel = (symbol) => {
+                const op = OPERATION_OPTIONS.find(opt => opt.symbol === symbol);
+                return op ? op.label : symbol;
+            };
+
+            // Placeholder function for adding a new rule
+            const handleAddRule = (category) => {
+                const newRule = {
+                    id: Date.now(), // Use timestamp for unique ID for now
+                    rating: 0,
+                    operation: OPERATION_OPTIONS[0].symbol,
+                    value: 0,
+                    description: '',
+                    ...(category === 'frequencyMapping' && { times: FREQUENCY_OPTIONS[0], finalRating: 0, highlight: 'bg-green-500' })
+                };
+
+                setConfig(prev => ({
+                    ...prev,
+                    [category]: [...prev[category], newRule]
+                }));
+            };
+
+            // Placeholder function for deleting a rule
+            const handleDeleteRule = (category, id) => {
+                 setConfig(prev => ({
+                    ...prev,
+                    [category]: prev[category].filter(rule => rule.id !== id)
+                }));
+            };
+
+            // Placeholder function for saving all changes
+            const handleSave = () => {
+                // In a real app, this is where you'd validate and then call onSaveConfig(config);
+                console.log("Configuration saved:", config);
+                onClose();
+            };
+
+
+            // Helper component for rendering a configuration table
+            const ConfigTable = ({ title, category, headers, data, showPercent = false, showHighlight = false }) => (
+                <div className="space-y-4">
+                    <h4 className="text-lg font-semibold text-gray-800">{title}</h4>
+                    
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {headers.map((header, index) => (
+                                        <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {/* Existing Rules */}
+                                {data.map((rule) => (
+                                    <tr key={rule.id}>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">{rule.rating || rule.times}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                            <span className="font-mono text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md mr-1">{rule.operation}</span>
+                                            {getOperationLabel(rule.operation)}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                            {rule.value || rule.finalRating}
+                                            {showPercent && rule.operation !== 'Between' && '%'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">{rule.description}</td>
+                                        {showHighlight && (
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                                                <div className={`w-4 h-4 rounded-full inline-block ${rule.highlight}`}></div>
+                                            </td>
+                                        )}
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                            <div className="flex space-x-2">
+                                                <button title="Edit Rule" className="text-indigo-500 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50 transition"><Pencil className="w-4 h-4" /></button>
+                                                <button 
+                                                    title="Delete Rule" 
+                                                    onClick={() => handleDeleteRule(category, rule.id)}
+                                                    className="text-red-500 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {/* Add New Rule Row (Simplified for now) */}
+                                <tr>
+                                    <td className="p-2 border-t text-sm">
+                                        {category !== 'frequencyMapping' && (
+                                            <input type="number" placeholder="Rating" className="p-1 border rounded-md w-16 text-center" min="1" max="5"/>
+                                        )}
+                                        {category === 'frequencyMapping' && (
+                                            <select className="p-1 border rounded-md w-full text-center">
+                                                {FREQUENCY_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                                            </select>
+                                        )}
+                                    </td>
+                                    <td className="p-2 border-t text-sm">
+                                        <select className="p-1 border rounded-md w-full">
+                                            {OPERATION_OPTIONS.map(op => <option key={op.symbol} value={op.symbol}>{op.symbol} - {op.label}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="p-2 border-t text-sm flex items-center space-x-1">
+                                        <input type="text" placeholder="Value" className="p-1 border rounded-md w-24 text-center"/>
+                                        {showPercent && <span className="text-gray-500">%</span>}
+                                    </td>
+                                    <td className="p-2 border-t text-sm">
+                                        <input type="text" placeholder="Description" className="p-1 border rounded-md w-full"/>
+                                    </td>
+                                    {showHighlight && (
+                                        <td className="p-2 border-t text-sm">
+                                            <select className="p-1 border rounded-md w-full">
+                                                {/* Mock colors for highlight */}
+                                                <option value="bg-green-500">Green</option>
+                                                <option value="bg-red-500">Red</option>
+                                                <option value="bg-orange-500">Orange</option>
+                                            </select>
+                                        </td>
+                                    )}
+                                    <td className="p-2 border-t text-sm">
+                                        <button 
+                                            onClick={() => handleAddRule(category)}
+                                            className="px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition flex items-center text-xs"
+                                        >
+                                            <Plus className="w-3 h-3 mr-1"/> Add
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+
+
+            return (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 transition-opacity">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl transition-transform transform scale-100 max-h-[90vh] flex flex-col">
+                        
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-gray-800">
+                                Configure Rating Guidelines
+                            </h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body (Tables) */}
+                        <div className="p-6 space-y-8 overflow-y-auto flex-1">
+                            
+                            {/* 1. % Change Rating Table */}
+                            <ConfigTable
+                                title="% Change Rating"
+                                category="percentChangeRating"
+                                headers={['Rating', 'Operation (If % Change)', '% Change', 'Description', 'Actions']}
+                                data={config.percentChangeRating}
+                                showPercent={true}
+                            />
+                            
+                            {/* 2. Customer Complaints Rating Table */}
+                            <ConfigTable
+                                title="Customer Complaint Rating"
+                                category="customerComplaintsRating"
+                                headers={['Rating', 'Operation (If Customer Complaint Count)', 'Customer Complaint Count', 'Description', 'Actions']}
+                                data={config.customerComplaintsRating}
+                                showPercent={false}
+                            />
+
+                            {/* 3. Frequency Mapping Table */}
+                            <ConfigTable
+                                title="Frequency"
+                                category="frequencyMapping"
+                                headers={['Times', 'Operation (If Final Rating)', 'Final Rating', 'Description', 'Highlight', 'Actions']}
+                                data={config.frequencyMapping}
+                                showPercent={false}
+                                showHighlight={true}
+                            />
+
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl border-t">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                            >
+                                <Save className="w-4 h-4 inline mr-1" /> Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        /**
+         * Row Component for Matrix Data
+         */
         const MatrixRow = ({ initialData, initialIsEditing = false, onSave, onDelete }) => {
             const [isEditing, setIsEditing] = useState(initialIsEditing);
             const [editData, setEditData] = useState(initialData);
@@ -384,11 +630,6 @@
             const handleEdit = () => {
                 setIsEditing(true);
             };
-
-            // Lucide Icons
-            const Save = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-save"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
-            const Pencil = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-pencil"><path d="M17 3a2.85 2.85 0 0 0-4 0L7 13v4h4l10-10a2.85 2.85 0 0 0 0-4z"/><path d="M15 5 19 9"/></svg>;
-            const Trash2 = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
 
 
             return (
@@ -521,167 +762,11 @@
         };
 
 
-        // --- Audit Decision Matrix Detail ---
+        // --- Main Page Components ---
 
-        const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => {
-            // State for the matrix data rows
-            const [matrixData, setMatrixData] = useState(initialMatrixData || []);
-            // Ensure nextId starts higher than existing IDs (including those in matrixData, or 1 if empty)
-            const [nextId, setNextId] = useState(
-                (initialMatrixData && initialMatrixData.length > 0) 
-                    ? Math.max(...initialMatrixData.map(d => d.id)) + 1 
-                    : 1
-            );
-
-            const handleSaveRow = useCallback((id, updatedData) => {
-                // Destructure and remove the temporary 'isNew' flag from the data object
-                const { isNew, ...dataToSave } = updatedData;
-
-                setMatrixData(prev => prev.map(row => 
-                    row.id === id 
-                        ? { ...dataToSave } // Save the cleaned data without 'isNew'
-                        : row
-                ));
-            }, []);
-
-            const handleDeleteRow = useCallback((id) => {
-                setMatrixData(prev => prev.filter(row => row.id !== id));
-            }, []);
-            
-            const handleAddRow = () => {
-                const newRow = {
-                    id: nextId,
-                    line: LINE_OPTIONS[0],
-                    target: '', // Empty string to show an empty field
-                    actualPPM: '', // Empty string to show an empty field
-                    complaints: '', // Empty string to show an empty field
-                    isNew: true, // Flag to indicate this row should start in edit mode
-                };
-                setMatrixData(prev => [...prev, newRow]);
-                setNextId(prev => prev + 1);
-            };
-
-            // Lucide Icons
-            const ArrowLeft = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>;
-            const Download = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
-            const Upload = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
-            const Plus = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-
-
-            // Helper for table rendering
-            const tableHeaders = ['LINE', 'TARGET', 'ASSEMBLY PPM', '% CHANGE', 'RATING', 'CUSTOMER COMPLAINTS', 'RATING', 'FINAL RATING', 'FREQUENCY', 'ACTIONS'];
-
-
-            return (
-                <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
-                    {/* Header with Back Button */}
-                    <div className="flex items-center mb-6 pb-4 border-b">
-                        <button onClick={onBack} className="text-gray-500 hover:text-indigo-600 transition mr-4 p-2 rounded-full hover:bg-gray-100">
-                            <ArrowLeft className="w-6 h-6" />
-                        </button>
-                        <h2 className="text-2xl font-bold text-gray-800 flex-1">
-                            Audit Decision Matrix: <span className="text-indigo-600">{auditName}</span>
-                        </h2>
-                    </div>
-
-                    {/* Rating Guidelines Section */}
-                    <div className="bg-indigo-50 p-6 rounded-xl mb-8 relative">
-                        <div className="flex justify-between items-start mb-4">
-                            <h3 className="text-xl font-semibold text-gray-800">Rating Guidelines</h3>
-                            <button className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
-                                Configure
-                            </button>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-                            <div>
-                                <h4 className="font-bold text-gray-700 mb-2">% Change Rating:</h4>
-                                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                                    <li>**5** - Excellent performance* (&le; 0%)</li>
-                                    <li>**3** - Good performance* (0% &lt; &delta; &lt; 20%)</li>
-                                    <li className="text-red-600">**1** - Poor performance* (&ge; 20%)</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-gray-700 mb-2">Customer Complaints Rating:</h4>
-                                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                                    <li>**5** - No customer issues* (0 complaints)</li>
-                                    <li>**3** - Minor customer issues* (1-2 complaints)</li>
-                                    <li className="text-red-600">**1** - Major customer issues* (&ge; 3 complaints)</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-gray-700 mb-2">Frequency Mapping:</h4>
-                                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                                    <li>**Annually** - Final Rating &ge; 15 (High Priority)</li>
-                                    <li>**Quarterly** - Final Rating 9-14 (Medium Priority)</li>
-                                    <li>**Weekly** - Final Rating &le; 8 (Regular Audit)</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Matrix Data Section */}
-                    <h3 className="text-xl font-semibold text-gray-800 mb-4">Matrix Data</h3>
-                    
-                    <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
-                        <div className="flex space-x-3 w-full sm:w-auto justify-end">
-                            <button className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-                                <Download className="w-4 h-4 mr-2" /> Download Import Format
-                            </button>
-                            <button className="flex items-center px-3 py-2 text-sm text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition font-medium">
-                                <Upload className="w-4 h-4 mr-2" /> Excel Import
-                            </button>
-                            <button 
-                                onClick={handleAddRow}
-                                className="flex items-center px-3 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition font-medium"
-                            >
-                                <Plus className="w-4 h-4 mr-1" /> Add
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Data Table */}
-                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    {tableHeaders.map((header, index) => (
-                                        <th key={index} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            {header}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {matrixData.map((item) => (
-                                    <MatrixRow
-                                        key={item.id}
-                                        // If the item has the 'isNew' flag, start it in edit mode
-                                        initialIsEditing={!!item.isNew} 
-                                        initialData={item}
-                                        onSave={handleSaveRow}
-                                        onDelete={handleDeleteRow}
-                                    />
-                                ))}
-                                {matrixData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={10} className="text-center py-6 text-gray-500">
-                                            No matrix data available. Click 'Add' to start.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                </div>
-            );
-        };
-
-
-        // --- Audit Records Listing ---
-
+        /**
+         * Audit Records Listing Page (Uses AuditRecordModal)
+         */
         const AuditRecordsListing = ({ onViewDetails }) => {
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingRecord, setEditingRecord] = useState(null); // Holds the record data if editing, or null if creating
@@ -728,10 +813,7 @@
 
             // Lucide Icons
             const ClipboardList = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="10" x2="14" y1="11" y2="11"/><line x1="10" x2="16" y1="15" y2="15"/><line x1="10" x2="12" y1="19" y2="19"/></svg>;
-            const Pencil = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-pencil"><path d="M17 3a2.85 2.85 0 0 0-4 0L7 13v4h4l10-10a2.85 2.85 0 0 0 0-4z"/><path d="M15 5 19 9"/></svg>;
             const Eye = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
-            const Trash2 = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
-
 
             return (
                 <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
@@ -829,8 +911,198 @@
             );
         };
 
+        /**
+         * Audit Decision Matrix Detail Page (Uses RatingConfigModal and MatrixRow)
+         */
+        const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => {
+            // State for the matrix data rows
+            const [matrixData, setMatrixData] = useState(initialMatrixData || []);
+            // Ensure nextId starts higher than existing IDs (including those in matrixData, or 1 if empty)
+            const [nextId, setNextId] = useState(
+                (initialMatrixData && initialMatrixData.length > 0) 
+                    ? Math.max(...initialMatrixData.map(d => d.id)) + 1 
+                    : 1
+            );
+            
+            // State to control the visibility of the configuration modal
+            const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+            // State for the rating configuration (using mock data for now)
+            const [ratingConfig, setRatingConfig] = useState(initialConfig);
 
-        // --- Audit Schedule ---
+            const handleSaveRow = useCallback((id, updatedData) => {
+                // Destructure and remove the temporary 'isNew' flag from the data object
+                const { isNew, ...dataToSave } = updatedData;
+
+                setMatrixData(prev => prev.map(row => 
+                    row.id === id 
+                        ? { ...dataToSave } // Save the cleaned data without 'isNew'
+                        : row
+                ));
+            }, []);
+
+            const handleDeleteRow = useCallback((id) => {
+                setMatrixData(prev => prev.filter(row => row.id !== id));
+            }, []);
+            
+            const handleAddRow = () => {
+                const newRow = {
+                    id: nextId,
+                    line: LINE_OPTIONS[0],
+                    target: '', // Empty string to show an empty field
+                    actualPPM: '', // Empty string to show an empty field
+                    complaints: '', // Empty string to show an empty field
+                    isNew: true, // Flag to indicate this row should start in edit mode
+                };
+                setMatrixData(prev => [...prev, newRow]);
+                setNextId(prev => prev + 1);
+            };
+            
+            // Function to update rating configuration (for future implementation)
+            const handleSaveConfig = (newConfig) => {
+                setRatingConfig(newConfig);
+                setIsConfigModalOpen(false);
+            };
+
+
+            // Lucide Icons
+            const ArrowLeft = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>;
+            const Download = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+            const Upload = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
+
+
+            // Helper for table rendering
+            const tableHeaders = ['LINE', 'TARGET', 'ASSEMBLY PPM', '% CHANGE', 'RATING', 'CUSTOMER COMPLAINTS', 'RATING', 'FINAL RATING', 'FREQUENCY', 'ACTIONS'];
+
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+                    {/* Header with Back Button */}
+                    <div className="flex items-center mb-6 pb-4 border-b">
+                        <button onClick={onBack} className="text-gray-500 hover:text-indigo-600 transition mr-4 p-2 rounded-full hover:bg-gray-100">
+                            <ArrowLeft className="w-6 h-6" />
+                        </button>
+                        <h2 className="text-2xl font-bold text-gray-800 flex-1">
+                            Audit Decision Matrix: <span className="text-indigo-600">{auditName}</span>
+                        </h2>
+                    </div>
+
+                    {/* Rating Guidelines Section */}
+                    <div className="bg-indigo-50 p-6 rounded-xl mb-8 relative">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xl font-semibold text-gray-800">Rating Guidelines</h3>
+                            <button 
+                                onClick={() => setIsConfigModalOpen(true)}
+                                className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                            >
+                                Configure
+                            </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                            {/* % Change Rating Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">% Change Rating:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.percentChangeRating.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.rating}** - {rule.description}* ({rule.operation} {rule.value}{rule.operation !== 'Between' && '%'})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            {/* Customer Complaints Rating Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">Customer Complaints Rating:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.customerComplaintsRating.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.rating}** - {rule.description}* ({rule.operation} {rule.value})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            {/* Frequency Mapping Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">Frequency Mapping:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.frequencyMapping.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.times}** - Final Rating {rule.operation} {rule.finalRating} ({rule.description})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Matrix Data Section */}
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">Matrix Data</h3>
+                    
+                    <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
+                        <div className="flex space-x-3 w-full sm:w-auto justify-end">
+                            <button className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                <Download className="w-4 h-4 mr-2" /> Download Import Format
+                            </button>
+                            <button className="flex items-center px-3 py-2 text-sm text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition font-medium">
+                                <Upload className="w-4 h-4 mr-2" /> Excel Import
+                            </button>
+                            <button 
+                                onClick={handleAddRow}
+                                className="flex items-center px-3 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition font-medium"
+                            >
+                                <Plus className="w-4 h-4 mr-1" /> Add
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Data Table */}
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {tableHeaders.map((header, index) => (
+                                        <th key={index} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {matrixData.map((item) => (
+                                    <MatrixRow
+                                        key={item.id}
+                                        // If the item has the 'isNew' flag, start it in edit mode
+                                        initialIsEditing={!!item.isNew} 
+                                        initialData={item}
+                                        onSave={handleSaveRow}
+                                        onDelete={handleDeleteRow}
+                                    />
+                                ))}
+                                {matrixData.length === 0 && (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-6 text-gray-500">
+                                            No matrix data available. Click 'Add' to start.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {/* Rating Configuration Modal */}
+                    <RatingConfigModal
+                        isOpen={isConfigModalOpen}
+                        onClose={() => setIsConfigModalOpen(false)}
+                        initialConfig={ratingConfig}
+                        onSaveConfig={handleSaveConfig}
+                    />
+                    
+                </div>
+            );
+        };
+
+
+        // --- Audit Schedule Page ---
 
         const AuditSchedule = () => {
             // Lucide Icons
