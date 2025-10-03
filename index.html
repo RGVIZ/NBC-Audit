@@ -3,1101 +3,1292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audit Decision Matrix</title>
-    
+    <title>Audit Management Dashboard</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Roboto', 'sans-serif'],
-            },
-            colors: {
-              // Custom colors matching the requirement
-              'primary-orange': '#FF9800',
-              'sidebar-dark': '#263238',
-              'view-blue': '#1976D2',
-              'edit-grey': '#9E9E9E',
-              'delete-red': '#D32F2F',
-              'table-header-bg': '#E3F2FD',
-              'row-hover-bg': '#F1F1F1',
-            }
-          }
-        }
-      }
-    </script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Load React and ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Load Babel for on-the-fly JSX compilation in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/uuid@8.3.2/dist/umd/uuid.min.js"></script>
+    
+    <style>
+        /* Custom styles for the Inter font and smooth transitions */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Hide scrollbar for aesthetics */
+        .overflow-y-auto::-webkit-scrollbar {
+            display: none;
+        }
+        .overflow-y-auto {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
 </head>
-<body class="antialiased">
+<body class="bg-gray-50">
+    <!-- This is the container where the React app will be mounted -->
     <div id="root"></div>
 
+    <!-- The main application code using JSX (type="text/babel") -->
     <script type="text/babel">
-        // Use global variables provided by the CDNs
-        const { useState, useEffect, useMemo } = React;
-        const v4 = uuid.v4;
+        const { useState, useEffect, useCallback } = React;
+
+        // --- Constants and Configuration ---
+        const LINE_OPTIONS = ['Production Line', 'Assembly Line', 'Quality Check', 'Packaging', 'Shipping'];
+        const MOCK_COORDINATORS = [
+            'Alice Johnson', 'Bob Smith', 'Charlie Brown', 'Diana Prince', 'Evan Ross',
+            'Fiona Green', 'George Harris', 'Hannah Lee'
+        ];
         
-        // --- Local Storage Keys ---
-        const DECISION_RECORDS_KEY = 'auditDecisionRecords';
-        const SCHEDULE_RECORDS_KEY = 'auditScheduleRecords';
+        // Configuration options for the modal (static lookups)
+        const OPERATION_OPTIONS = [
+            { symbol: '>=', label: 'Greater than or Equal to' },
+            { symbol: '<=', label: 'Less than or Equal to' },
+            { symbol: '>', label: 'Greater than' },
+            { symbol: '<', label: 'Less than' },
+            { symbol: '=', label: 'Equal to' },
+            { symbol: 'Between', label: 'Between' },
+        ];
 
-        // --- Utility Functions ---
+        const FREQUENCY_OPTIONS = ['Annually', 'Quarterly', 'Weekly', 'Daily'];
 
-        /** Initializes or retrieves data from localStorage. */
-        const getLocalStorageItem = (key, defaultValue) => {
-          try {
-            const item = window.localStorage.getItem(key);
-            return item ? JSON.parse(item) : defaultValue;
-          } catch (error) {
-            console.error(`Error reading localStorage key "${key}":`, error);
-            return defaultValue;
-          }
+
+        // Mock data for the Audit Records Listing
+        const initialAuditRecordsData = [
+          { id: 1, name: 'Q1 Financial Review', coordinators: ['Alice Johnson', 'Bob Smith'], auditee: 'Internal', status: 'New', description: 'Review of financial statements and compliance measures for the first quarter.', matrixData: [
+            { id: 101, line: 'Production Line', target: 100, actualPPM: 120, complaints: 1 },
+            { id: 102, line: 'Assembly Line', target: 50, actualPPM: 40, complaints: 0 },
+            { id: 103, line: 'Quality Check', target: 10, actualPPM: 15, complaints: 5 },
+          ]},
+          { id: 2, name: 'Vendor Security Assessment', coordinators: ['Bob Smith'], auditee: 'Supplier', status: 'New', description: 'Annual security and data privacy assessment of third-party vendors.', matrixData: [] },
+          { id: 3, name: 'Marketing Compliance', coordinators: ['Diana Prince', 'Alice Johnson', 'Charlie Brown'], auditee: 'Internal', status: 'New', description: 'Check all Q4 marketing materials for regulatory compliance.', matrixData: [] },
+        ];
+
+        // Mock data for the Audit Schedule
+        const ScheduleData = [
+          { id: 101, title: 'Annual Financial Review', startDate: '2024-10-01', endDate: '2024-10-31', status: 'In Progress', lead: 'J. Smith' },
+          { id: 102, title: 'Cloud Security Assessment', startDate: '2025-01-15', endDate: '2025-03-30', status: 'Planned', lead: 'A. Chen' },
+          { id: 103, title: 'Vendor Compliance Check', startDate: '2024-12-01', endDate: '2024-12-15', status: 'Awaiting Kickoff', lead: 'M. Lee' },
+        ];
+
+        // Initial Configuration State (Matching the logic in calculateMetrics)
+        const initialConfig = {
+            // 1. % Change Rating Rules
+            percentChangeRating: [
+                { id: 1, rating: 5, operation: '<=', value: 0, description: 'Excellent performance' },
+                { id: 2, rating: 3, operation: 'Between', value: '0% - 20%', description: 'Good performance' },
+                { id: 3, rating: 1, operation: '>', value: 20, description: 'Poor performance' },
+            ],
+            // 2. Customer Complaints Rating Rules
+            customerComplaintsRating: [
+                { id: 1, rating: 5, operation: '=', value: 0, description: 'No customer issues' },
+                { id: 2, rating: 3, operation: 'Between', value: '1 - 2', description: 'Minor customer issues' },
+                { id: 3, rating: 1, operation: '>=', value: 3, description: 'Major customer issues' },
+            ],
+            // 3. Frequency Mapping Rules
+            frequencyMapping: [
+                { id: 1, times: 'Annually', operation: '>=', finalRating: 15, description: 'High Priority', highlight: 'bg-red-500' },
+                { id: 2, times: 'Quarterly', operation: 'Between', finalRating: '9 - 14', description: 'Medium Priority', highlight: 'bg-orange-500' },
+                { id: 3, times: 'Weekly', operation: '<=', finalRating: 8, description: 'Regular Audit', highlight: 'bg-green-500' },
+            ]
         };
+        
+        // --- Calculation Logic (Utility Functions) ---
 
-        /** Sets data to localStorage. */
-        const setLocalStorageItem = (key, value) => {
-          try {
-            window.localStorage.setItem(key, JSON.stringify(value));
-          } catch (error) {
-            console.error(`Error writing localStorage key "${key}":`, error);
-          }
-        };
+        /**
+         * Finds the appropriate rating based on a list of rules and the input value.
+         */
+        const calculateMetrics = (target, actualPPM, complaints) => {
+            target = Number(target) || 0;
+            actualPPM = Number(actualPPM) || 0;
+            complaints = Number(complaints) || 0;
 
-        /** Calculates Percentage Change. */
-        const calculatePctChange = (targetPPM, actualPPM) => {
-          if (targetPPM === 0 || targetPPM === null || targetPPM === undefined) {
-            return 'N/A';
-          }
-          const pctChange = ((targetPPM - actualPPM) / targetPPM) * 100;
-          return parseFloat(pctChange.toFixed(2));
-        };
+            // 1. % Change
+            const change = target === 0 ? 0 : ((actualPPM - target) / target) * 100;
+            const changeStr = `${change.toFixed(1)}%`;
 
-        /** Looks up rating based on a numeric value and rules. */
-        const lookupRating = (value, rules) => {
-          if (value === 'N/A' || value === null || value === undefined) return null;
-
-          // Assumes rules are sorted ascending by 'max'
-          const rule = (rules || []).find(r => value <= r.max);
-          return rule ? r.rating : null;
-        };
-
-        /** Looks up frequency based on the final rating. */
-        const lookupFrequency = (finalRating, rules) => {
-          if (finalRating === null || finalRating === undefined) return { frequency: null, color: null };
-
-          const rule = (rules || []).find(r => r.finalRating === finalRating);
-          return rule ? { frequency: r.frequency, color: r.color } : { frequency: null, color: null };
-        };
-
-        /** Calculates all derived fields for a decision matrix row. */
-        const calculateRowData = (row, rules) => {
-          const { targetPPM, actualPPM, complaints } = row;
-
-          // 1. % Change
-          const pctChange = calculatePctChange(targetPPM, actualPPM);
-
-          // 2. PPM Rating
-          const pctChangeRating = lookupRating(pctChange, rules.pctChangeRules);
-
-          // 3. Complaint Rating
-          const complaintRating = lookupRating(complaints, rules.complaintRules);
-
-          // 4. Final Rating (Multiplication)
-          let finalRating = null;
-          if (pctChangeRating !== null && complaintRating !== null) {
-            finalRating = pctChangeRating * complaintRating;
-          }
-
-          // 5. Frequency
-          const { frequency, color: frequencyColor } = lookupFrequency(finalRating, rules.frequencyRules);
-
-          return {
-            ...row,
-            pctChange,
-            pctChangeRating,
-            complaintRating,
-            finalRating,
-            frequency,
-            frequencyColor,
-          };
-        };
-
-        // --- Custom Hooks ---
-
-        /** Custom hook for managing the single-page application's route via URL hash. */
-        const useRoute = () => {
-          // Initialize from hash or default
-          const [route, setRoute] = useState(window.location.hash.slice(1) || 'audit-decision-matrix');
-
-          useEffect(() => {
-            const handleHashChange = () => {
-              setRoute(window.location.hash.slice(1) || 'audit-decision-matrix');
-            };
-
-            window.addEventListener('hashchange', handleHashChange);
-            return () => window.removeEventListener('hashchange', handleHashChange);
-          }, []);
-
-          const navigate = (path) => {
-            window.location.hash = path;
-          };
-
-          const [path, id] = route.split('/');
-          const params = path === 'decision-matrix' && id ? { id } : {};
-
-          return { route: path, params, navigate };
-        };
-
-        // --- Tailwind CSS Classes (as constants) ---
-
-        const COLORS = {
-          primary: 'bg-[#FF9800] text-white',
-          view: 'bg-[#1976D2] text-white',
-          edit: 'bg-[#9E9E9E] text-white',
-          delete: 'bg-[#D32F2F] text-white',
-          cancel: 'bg-[#9E9E9E] text-black',
-          sidebarBg: 'bg-[#263238]',
-          sidebarText: 'text-white',
-          activeSidebar: 'bg-[#FF9800]',
-          tableHeader: 'bg-[#E3F2FD]',
-          rowHover: 'hover:bg-[#F1F1F1]',
-        };
-
-        const BUTTON_BASE = 'px-3 py-1 text-sm rounded transition-colors duration-150';
-        const PRIMARY_BUTTON = `${BUTTON_BASE} ${COLORS.primary}`;
-        const VIEW_BUTTON = `${BUTTON_BASE} ${COLORS.view}`;
-        const EDIT_BUTTON = `${BUTTON_BASE} ${COLORS.edit}`;
-        const DELETE_BUTTON = `${BUTTON_BASE} ${COLORS.delete}`;
-        const CANCEL_BUTTON = `${BUTTON_BASE} ${COLORS.cancel}`;
-
-        const INPUT_BASE = 'border border-gray-300 p-2 rounded w-full focus:ring-2 focus:ring-[#FF9800]';
-
-        // --- Components: Shared UI Elements ---
-
-        const Modal = ({ title, isOpen, onClose, children, footer, size = 'max-w-xl' }) => {
-          if (!isOpen) return null;
-
-          return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 font-sans" onClick={onClose}>
-              <div className={`bg-white rounded-lg shadow-xl p-6 m-4 ${size}`} onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-xl font-bold mb-4 border-b pb-2">{title}</h2>
-                <div className="max-h-[80vh] overflow-y-auto pr-2">
-                  {children}
-                </div>
-                {footer && <div className="mt-4 pt-4 border-t flex justify-end space-x-2">{footer}</div>}
-              </div>
-            </div>
-          );
-        };
-
-        const Sidebar = ({ navigate, activeRoute }) => {
-          const items = [
-            { name: 'Audit Decision Matrix', route: 'audit-decision-matrix' },
-            { name: 'Audit Schedule', route: 'audit-schedule' },
-          ];
-
-          return (
-            <div className={`fixed left-0 top-0 h-screen w-[220px] ${COLORS.sidebarBg} ${COLORS.sidebarText} font-sans shadow-lg`}>
-              <h1 className="text-xl font-bold p-4 border-b border-gray-700">Audit System</h1>
-              <nav className="p-2 space-y-1">
-                {items.map((item) => (
-                  <div
-                    key={item.route}
-                    className={`p-3 rounded cursor-pointer transition-colors ${activeRoute === item.route ? COLORS.activeSidebar : 'hover:bg-[#37474F]'}`}
-                    onClick={() => navigate(item.route)}
-                  >
-                    {item.name}
-                  </div>
-                ))}
-              </nav>
-            </div>
-          );
-        };
-
-        const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
-          return (
-            <Modal
-              title={title}
-              isOpen={isOpen}
-              onClose={onCancel}
-              footer={
-                <>
-                  <button className={CANCEL_BUTTON} onClick={onCancel}>Cancel</button>
-                  <button className={DELETE_BUTTON} onClick={onConfirm}>Confirm Delete</button>
-                </>
-              }
-            >
-              <p>{message}</p>
-            </Modal>
-          );
-        };
-
-        // --- Components: Modals ---
-
-        const UpsertDecisionMatrixModal = ({
-          isOpen,
-          onClose,
-          onSubmit,
-          initialData = null,
-          isEdit = false
-        }) => {
-          const [formData, setFormData] = useState({
-            name: initialData?.name || '',
-            appliesTo: initialData?.appliesTo || 'Line', // Default for new records
-            appliesToDetail: initialData?.appliesToDetail || '',
-            coordinator: initialData?.coordinator || '',
-            description: initialData?.description || '',
-          });
-
-          const isFormValid = useMemo(() => {
-            return formData.name.length > 0 && formData.coordinator.length > 0;
-          }, [formData]);
-
-          const handleChange = (e) => {
-            const { name, value } = e.target;
-            setFormData(prev => ({ ...prev, [name]: value }));
-          };
-
-          const handleAppliesToChange = (e) => {
-            const value = e.target.value;
-            setFormData(prev => ({
-              ...prev,
-              appliesTo: value,
-              appliesToDetail: '', // Reset detail when appliesTo changes
-            }));
-          };
-
-          const handleSubmit = (e) => {
-            e.preventDefault();
-            if (!isFormValid) return;
-
-            onSubmit(formData);
-            onClose();
-          };
-
-          // Helper to get the correct label/placeholder for the detail field
-          const getDetailFieldConfig = () => {
-            switch (formData.appliesTo) {
-              case 'Line': return { label: 'Line Identifier', placeholder: 'e.g., Line A' };
-              case 'Plant': return { label: 'Plant Code', placeholder: 'e.g., P001' };
-              case 'Supplier': return { label: 'Supplier Name', placeholder: 'e.g., Acme Ltd' };
-              default: return { label: 'Detail', placeholder: '' };
-            }
-          };
-
-          const detailConfig = getDetailFieldConfig();
-
-          return (
-            <Modal
-              title={isEdit ? 'Edit Decision Matrix' : 'Create New Decision Matrix'}
-              isOpen={isOpen}
-              onClose={onClose}
-              footer={
-                <>
-                  <button className={CANCEL_BUTTON} onClick={onClose}>Cancel</button>
-                  <button
-                    className={PRIMARY_BUTTON}
-                    onClick={handleSubmit}
-                    disabled={!isFormValid}
-                    style={{ opacity: isFormValid ? 1 : 0.5, cursor: isFormValid ? 'pointer' : 'not-allowed' }}
-                  >
-                    {isEdit ? 'Save changes' : 'Create'}
-                  </button>
-                </>
-              }
-            >
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Name */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Name*</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    maxLength={100}
-                    className={INPUT_BASE}
-                    required
-                  />
-                </div>
-
-                {/* Applies To */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Applies To*</label>
-                  <div className="flex space-x-4">
-                    {['Line', 'Plant', 'Supplier'].map(option => (
-                      <label key={option} className="flex items-center space-x-1">
-                        <input
-                          type="radio"
-                          name="appliesTo"
-                          value={option}
-                          checked={formData.appliesTo === option}
-                          onChange={handleAppliesToChange}
-                          required
-                        />
-                        <span>{option}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Applies To Detail (Optional based on radio selection) */}
-                {formData.appliesTo && (
-                  <div>
-                    <label className="block text-sm font-medium mb-1">{detailConfig.label}</label>
-                    <input
-                      type="text"
-                      name="appliesToDetail"
-                      value={formData.appliesToDetail}
-                      onChange={handleChange}
-                      placeholder={detailConfig.placeholder}
-                      className={INPUT_BASE}
-                    />
-                  </div>
-                )}
-
-                {/* Coordinator */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Coordinator*</label>
-                  <input
-                    type="text"
-                    name="coordinator"
-                    value={formData.coordinator}
-                    onChange={handleChange}
-                    maxLength={80}
-                    className={INPUT_BASE}
-                    required
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    rows={3}
-                    maxLength={500}
-                    className={INPUT_BASE}
-                  />
-                </div>
-              </form>
-            </Modal>
-          );
-        };
-
-        const RuleConfigModal = ({ isOpen, onClose, rules, onSave }) => {
-          const [currentRules, setCurrentRules] = useState(rules);
-          const [activeTab, setActiveTab] = useState('pctChangeRules');
-
-          useEffect(() => {
-            setCurrentRules(rules);
-          }, [rules]);
-
-          const updateRule = (type, index, field, value) => {
-            const newRules = [...(currentRules[type] || [])];
-            newRules[index][field] = value;
-            setCurrentRules(prev => ({ ...prev, [type]: newRules }));
-          };
-
-          const addRule = (type) => {
-            let newRule = {};
-            if (type === 'frequencyRules') {
-              newRule = { finalRating: '', frequency: '', color: '#000000' };
+            // 2. % Change Rating (Based on initial hardcoded logic)
+            let changeRating;
+            if (change <= 0) {
+                changeRating = 5; 
+            } else if (change > 0 && change < 20) {
+                changeRating = 3; 
             } else {
-              // Ensure 'max' is handled correctly as a number or empty string
-              newRule = { rating: 1, max: '', description: '' };
+                changeRating = 1; 
             }
 
-            setCurrentRules(prev => ({ ...prev, [type]: [...(prev[type] || []), newRule] }));
-          };
+            // 3. Customer Complaints Rating (Based on initial hardcoded logic)
+            let complaintsRating;
+            if (complaints === 0) {
+                complaintsRating = 5; 
+            } else if (complaints >= 1 && complaints <= 2) {
+                complaintsRating = 3; 
+            } else {
+                complaintsRating = 1; 
+            }
 
-          const deleteRule = (type, index) => {
-            const newRules = (currentRules[type] || []).filter((_, i) => i !== index);
-            setCurrentRules(prev => ({ ...prev, [type]: newRules }));
-          };
+            // 4. Final Rating
+            const finalRating = changeRating * complaintsRating;
 
-          const renderRulesForm = (type, rulesList, title, fields) => (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">{title}</h3>
-                <button className={`${PRIMARY_BUTTON}`} onClick={() => addRule(type)}>+ Add Rule</button>
-              </div>
+            // 5. Frequency (Based on initial hardcoded logic)
+            let frequency;
+            if (finalRating >= 15) {
+                frequency = 'Annually'; 
+            } else if (finalRating >= 9 && finalRating <= 14) {
+                frequency = 'Quarterly'; 
+            } else {
+                frequency = 'Weekly'; 
+            }
 
-              <div className="space-y-3">
-                {(rulesList || []).map((rule, index) => (
-                  <div key={index} className="border p-3 rounded grid grid-cols-12 gap-2 items-end">
-                    {fields.map(field => (
-                      <div key={field.name} className={`col-span-${field.span}`}>
-                        <label className="block text-xs font-medium mb-1">{field.label}</label>
-                        {field.type === 'color' ? (
-                          <input
-                            type="color"
-                            value={rule[field.name]}
-                            onChange={(e) => updateRule(type, index, field.name, e.target.value)}
-                            className="w-full h-10 p-1 border-gray-300 rounded"
-                          />
-                        ) : (
-                          <input
-                            type={field.type}
-                            value={rule[field.name]}
-                            onChange={(e) => {
-                              const val = field.type === 'number' ? (e.target.value === '' ? '' : parseFloat(e.target.value)) : e.target.value;
-                              updateRule(type, index, field.name, val);
-                            }}
-                            className={INPUT_BASE}
-                            min={field.min}
-                            max={field.max}
-                            placeholder={field.placeholder}
-                            required={field.required}
-                          />
-                        )}
-                      </div>
-                    ))}
-                    <div className="col-span-2 text-right">
-                      <button className={`${DELETE_BUTTON}`} onClick={() => deleteRule(type, index)}>Delete</button>
+            return {
+                change: changeStr,
+                changeRating,
+                complaintsRating,
+                finalRating,
+                frequency,
+            };
+        };
+
+        // --- Utility Components & Modals (Defined FIRST to prevent ReferenceError) ---
+
+        /**
+         * Renders an Auditee or Status badge with appropriate color.
+         */
+        const Badge = ({ children, type }) => {
+            let colorClasses = '';
+            if (type === 'Auditee') {
+                colorClasses = children === 'Internal' ? 'bg-indigo-100 text-indigo-700' : 'bg-pink-100 text-pink-700';
+            } else if (type === 'Status') {
+                colorClasses = children === 'New' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700';
+            } else if (type === 'Frequency') {
+                colorClasses = children === 'Annually' ? 'bg-red-100 text-red-800' :
+                               children === 'Quarterly' ? 'bg-orange-100 text-orange-800' :
+                               'bg-green-100 text-green-800';
+            }
+
+            return (
+                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colorClasses}`}>
+                    {children}
+                </span>
+            );
+        };
+        
+        // Lucide Icons
+        const X = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
+        const Save = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-save"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+        const Pencil = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-pencil"><path d="M17 3a2.85 2.85 0 0 0-4 0L7 13v4h4l10-10a2.85 2.85 0 0 0 0-4z"/><path d="M15 5 19 9"/></svg>;
+        const Trash2 = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
+        const Plus = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+        
+        /**
+         * Modal for creating or editing an Audit Record. (Fixes ReferenceError)
+         */
+        const AuditRecordModal = ({ isOpen, onClose, initialData, onSave }) => {
+            const defaultData = { name: '', coordinators: [], auditee: 'Internal', status: 'New', description: '', matrixData: [] };
+            const [formData, setFormData] = useState(initialData || defaultData);
+            const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+            const isEditMode = !!initialData; // Determine if we are editing or creating
+
+            useEffect(() => {
+                // Reset form when the modal opens or initialData changes
+                setFormData(initialData || defaultData);
+            }, [initialData, isOpen]);
+
+            if (!isOpen) return null;
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleAuditeeToggle = () => {
+                setFormData(prev => ({
+                    ...prev,
+                    auditee: prev.auditee === 'Internal' ? 'Supplier' : 'Internal'
+                }));
+            };
+
+            const handleCoordinatorToggle = (coordinator) => {
+                setFormData(prev => {
+                    const currentCoords = prev.coordinators;
+                    if (currentCoords.includes(coordinator)) {
+                        return { ...prev, coordinators: currentCoords.filter(c => c !== coordinator) };
+                    } else {
+                        return { ...prev, coordinators: [...currentCoords, coordinator] };
+                    }
+                });
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                // Basic validation
+                if (!formData.name || formData.coordinators.length === 0) {
+                    console.error("Name and at least one coordinator are required.");
+                    return;
+                }
+                
+                // Pass the data up for saving/updating
+                onSave(formData);
+                onClose();
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 transition-opacity">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg transition-transform transform scale-100">
+                        
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-gray-800">
+                                {isEditMode ? 'Edit Audit Record' : 'Create New Audit Record'}
+                            </h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body (Form) */}
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                            {/* Record Name */}
+                            <div>
+                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Record Name</label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    id="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    required
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="e.g., Q1 Financial Review"
+                                />
+                            </div>
+
+                            {/* Description */}
+                            <div>
+                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea
+                                    name="description"
+                                    id="description"
+                                    rows="3"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="Provide a brief summary of the audit scope..."
+                                />
+                            </div>
+
+                            {/* Coordinator Multi-Select */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Coordinators</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                    className="w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 flex justify-between items-center"
+                                >
+                                    <span className="truncate text-sm">
+                                        {formData.coordinators.length > 0 ? formData.coordinators.join(', ') : 'Select one or more coordinators'}
+                                    </span>
+                                    <svg className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                {isDropdownOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
+                                        {MOCK_COORDINATORS.map(coord => (
+                                            <div
+                                                key={coord}
+                                                onClick={() => handleCoordinatorToggle(coord)}
+                                                className={`px-4 py-2 cursor-pointer text-sm hover:bg-indigo-50 transition ${formData.coordinators.includes(coord) ? 'bg-indigo-100 font-semibold' : ''}`}
+                                            >
+                                                {coord}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Auditee Toggle */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Auditee Type</label>
+                                <div className="flex items-center space-x-4">
+                                    <button
+                                        type="button"
+                                        onClick={handleAuditeeToggle}
+                                        className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                            formData.auditee === 'Internal'
+                                                ? 'bg-indigo-600 text-white shadow-md'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Internal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleAuditeeToggle}
+                                        className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                            formData.auditee === 'Supplier'
+                                                ? 'bg-pink-600 text-white shadow-md'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Supplier/External
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl border-t">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                onClick={handleSubmit}
+                                className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                            >
+                                <Save className="w-4 h-4 inline mr-1" /> {isEditMode ? 'Update Record' : 'Create Record'}
+                            </button>
+                        </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-
-          const ruleConfigs = {
-            pctChangeRules: {
-              title: '% Change Rules',
-              fields: [
-                { name: 'rating', label: 'PPM Rating (1-5)', type: 'number', span: 2, min: 1, max: 5, required: true },
-                { name: 'max', label: 'Max % Change', type: 'number', span: 3, placeholder: 'e.g., 5.00', required: true },
-                { name: 'description', label: 'Description', type: 'text', span: 5, placeholder: 'e.g., Less than 5%', required: true },
-              ],
-            },
-            complaintRules: {
-              title: 'Complaint Rules',
-              fields: [
-                { name: 'rating', label: 'Complaint Rating (1-5)', type: 'number', span: 2, min: 1, max: 5, required: true },
-                { name: 'max', label: 'Max Complaints', type: 'number', span: 3, min: 0, placeholder: 'e.g., 5', required: true },
-                { name: 'description', label: 'Description', type: 'text', span: 5, placeholder: 'e.g., 5 or fewer complaints', required: true },
-              ],
-            },
-            frequencyRules: {
-              title: 'Frequency Rules',
-              fields: [
-                { name: 'finalRating', label: 'Final Rating (Product)', type: 'number', span: 2, min: 1, required: true },
-                { name: 'frequency', label: 'Frequency', type: 'text', span: 3, placeholder: 'e.g., Monthly', required: true },
-                { name: 'color', label: 'Label Color', type: 'color', span: 3, required: true },
-              ],
-            },
-          };
-
-          return (
-            <Modal
-              title="Configure Decision Matrix Rules"
-              isOpen={isOpen}
-              onClose={onClose}
-              size="max-w-4xl"
-              footer={
-                <>
-                  <button className={CANCEL_BUTTON} onClick={onClose}>Close</button>
-                  <button className={PRIMARY_BUTTON} onClick={() => onSave(currentRules)}>Save Rules</button>
-                </>
-              }
-            >
-              <div className="flex border-b mb-4">
-                {Object.keys(ruleConfigs).map(key => (
-                  <button
-                    key={key}
-                    className={`p-3 border-b-2 transition-colors ${activeTab === key ? 'border-[#FF9800] text-[#FF9800]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => setActiveTab(key)}
-                  >
-                    {ruleConfigs[key].title}
-                  </button>
-                ))}
-              </div>
-
-              {activeTab === 'pctChangeRules' && renderRulesForm('pctChangeRules', currentRules.pctChangeRules, ruleConfigs.pctChangeRules.title, ruleConfigs.pctChangeRules.fields)}
-              {activeTab === 'complaintRules' && renderRulesForm('complaintRules', currentRules.complaintRules, ruleConfigs.complaintRules.title, ruleConfigs.complaintRules.fields)}
-              {activeTab === 'frequencyRules' && renderRulesForm('frequencyRules', currentRules.frequencyRules, ruleConfigs.frequencyRules.title, ruleConfigs.frequencyRules.fields)}
-            </Modal>
-          );
-        };
-
-        // --- Components: Audit Decision Matrix Listing Page ---
-
-        const RecordCard = ({ record, navigate, onDelete, onEdit }) => {
-          const appliesToText = record.appliesToDetail
-            ? `${record.appliesTo} (${record.appliesToDetail})`
-            : record.appliesTo;
-
-          return (
-            <div className="p-4 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-white">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-xl font-bold mb-1">{record.name}</h3>
-                  <p className="text-sm text-gray-600 mb-1">Applies To: <span className="font-medium">{appliesToText}</span></p>
-                  <p className="text-sm text-gray-600">Coordinator: <span className="font-medium">{record.coordinator}</span></p>
                 </div>
-                <div className="flex space-x-2">
-                  <button className={VIEW_BUTTON} onClick={() => navigate(`decision-matrix/${record.id}`)}>View</button>
-                  <button className={EDIT_BUTTON} onClick={() => onEdit(record)}>Edit</button>
-                  <button className={DELETE_BUTTON} onClick={() => onDelete(record.id)}>Delete</button>
-                </div>
-              </div>
-            </div>
-          );
-        };
-
-        const AuditDecisionMatrixListing = ({ navigate, records, setRecords }) => {
-          const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-          const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-          const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-          const [recordToDelete, setRecordToDelete] = useState(null);
-          const [recordToEdit, setRecordToEdit] = useState(null);
-
-          // Handlers
-          const handleCreateRecord = (formData) => {
-            const now = new Date().toISOString();
-            const newRecord = {
-              id: `dm_${v4()}`,
-              ...formData,
-              createdAt: now,
-              updatedAt: now,
-              rows: [],
-              rules: {
-                pctChangeRules: [],
-                complaintRules: [],
-                frequencyRules: [],
-              },
-            };
-
-            // Newest first
-            const newRecords = [newRecord, ...records]; 
-            setRecords(newRecords);
-          };
-
-          const handleDeleteClick = (id) => {
-            setRecordToDelete(id);
-            setIsConfirmOpen(true);
-          };
-
-          const handleConfirmDelete = () => {
-            const newRecords = records.filter(r => r.id !== recordToDelete);
-            setRecords(newRecords);
-            setRecordToDelete(null);
-            setIsConfirmOpen(false);
-          };
-
-          const handleEditClick = (record) => {
-            setRecordToEdit(record);
-            setIsEditModalOpen(true);
-          };
-
-          const handleUpdateRecord = (updatedData) => {
-            const now = new Date().toISOString();
-            const updatedRecord = {
-              ...recordToEdit,
-              ...updatedData,
-              updatedAt: now,
-            };
-
-            const newRecords = records.map(r =>
-              r.id === updatedRecord.id ? updatedRecord : r
             );
-            setRecords(newRecords);
-            setRecordToEdit(null);
-          };
-
-          return (
-            <div className="p-6">
-              {/* Top Bar */}
-              <div className="flex justify-between items-center mb-6 border-b pb-4">
-                <h1 className="text-3xl font-bold">Audit Decision Matrix</h1>
-                <button
-                  className={PRIMARY_BUTTON}
-                  onClick={() => setIsCreateModalOpen(true)}
-                >
-                  + Add Record
-                </button>
-              </div>
-
-              {/* Record Cards Listing (Newest first) */}
-              <div className="space-y-4">
-                {records.length === 0 ? (
-                  <p className="text-gray-500">No decision matrix records found. Click "+ Add Record" to create one.</p>
-                ) : (
-                  records.map((record) => (
-                    <RecordCard
-                      key={record.id}
-                      record={record}
-                      navigate={navigate}
-                      onDelete={handleDeleteClick}
-                      onEdit={handleEditClick}
-                    />
-                  ))
-                )}
-              </div>
-
-              {/* Modals */}
-              <UpsertDecisionMatrixModal
-                isOpen={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
-                onSubmit={handleCreateRecord}
-              />
-
-              {recordToEdit && (
-                <UpsertDecisionMatrixModal
-                  isOpen={isEditModalOpen}
-                  onClose={() => setIsEditModalOpen(false)}
-                  onSubmit={handleUpdateRecord}
-                  initialData={recordToEdit}
-                  isEdit={true}
-                />
-              )}
-
-              <ConfirmModal
-                isOpen={isConfirmOpen}
-                title="Confirm Deletion"
-                message={`Are you sure you want to delete the Decision Matrix "${recordToDelete ? records.find(r => r.id === recordToDelete)?.name : ''}"? This action cannot be undone.`}
-                onConfirm={handleConfirmDelete}
-                onCancel={() => setIsConfirmOpen(false)}
-              />
-            </div>
-          );
         };
 
-        // --- Components: Decision Matrix Record Page (/decision-matrix/{id}) ---
+        /**
+         * Component for the Rating Configuration Modal.
+         */
+        const RatingConfigModal = ({ isOpen, onClose, initialConfig, onSaveConfig }) => {
+            // State for the configuration data within the modal
+            const [config, setConfig] = useState(initialConfig);
 
-        const DecisionMatrixRow = ({ row, rules, onUpdate, onDelete, isEditing, setIsEditing }) => {
-          const [editData, setEditData] = useState(row);
+            useEffect(() => {
+                if (isOpen) {
+                    // Reset or initialize state when modal opens
+                    setConfig(initialConfig);
+                }
+            }, [isOpen, initialConfig]);
 
-          useEffect(() => {
-            setEditData(row);
-          }, [row]);
-
-          const handleChange = (e) => {
-            const { name, value } = e.target;
-            // Auto-convert numeric fields
-            const val = ['targetPPM', 'actualPPM', 'complaints'].includes(name)
-              ? (value === '' ? '' : parseFloat(value))
-              : value;
-
-            setEditData(prev => ({ ...prev, [name]: val }));
-          };
-
-          const handleSave = () => {
-            // Check for required number fields to be non-empty before calculating
-            if (editData.targetPPM === '' || editData.actualPPM === '' || editData.complaints === '') {
-                alert("Please ensure Target PPM, Actual PPM, and Complaints are filled with numeric values before saving.");
-                return;
-            }
-
-            // Recalculate all fields based on the raw inputs
-            const updatedRow = calculateRowData(editData, rules);
-            onUpdate(updatedRow);
-            setIsEditing(false);
-          };
-
-          const handleCancel = () => {
-            setEditData(row); // Reset to original data
-            setIsEditing(false);
-          };
-
-          const AppliesToInstanceCell = isEditing ? (
-            <input
-              type="text"
-              name="appliesToInstance"
-              value={editData.appliesToInstance}
-              onChange={handleChange}
-              className={`${INPUT_BASE} p-1 text-sm`}
-            />
-          ) : (
-            <span className="font-medium">{row.appliesToInstance}</span>
-          );
-
-          const PPMInputCell = (name, value) => isEditing ? (
-            <input
-              type="number"
-              name={name}
-              value={value}
-              onChange={handleChange}
-              className={`${INPUT_BASE} p-1 text-sm text-right`}
-              min="0"
-              step="0.01"
-            />
-          ) : (
-            <span className="text-right block">{value}</span>
-          );
-
-          const ComplaintsCell = isEditing ? (
-            <input
-              type="number"
-              name="complaints"
-              value={editData.complaints}
-              onChange={handleChange}
-              className={`${INPUT_BASE} p-1 text-sm text-right`}
-              min="0"
-              step="1"
-            />
-          ) : (
-            <span className="text-right block">{row.complaints}</span>
-          );
-
-          const ActionButtons = isEditing ? (
-            <div className="flex space-x-2 justify-end">
-              <button className={`${PRIMARY_BUTTON} px-2 py-0.5`} onClick={handleSave}>Save</button>
-              <button className={`${CANCEL_BUTTON} px-2 py-0.5`} onClick={handleCancel}>Cancel</button>
-            </div>
-          ) : (
-            <div className="flex space-x-2 justify-end">
-              <button className={`${EDIT_BUTTON} px-2 py-0.5`} onClick={() => setIsEditing(true)}>Edit</button>
-              <button className={`${DELETE_BUTTON} px-2 py-0.5`} onClick={() => onDelete(row.rowId)}>Delete</button>
-            </div>
-          );
-
-          return (
-            <tr className={`${COLORS.rowHover}`}>
-              <td className="p-2 border">{AppliesToInstanceCell}</td>
-              <td className="p-2 border text-right">{PPMInputCell('targetPPM', editData.targetPPM)}</td>
-              <td className="p-2 border text-right">{PPMInputCell('actualPPM', editData.actualPPM)}</td>
-              <td className="p-2 border text-right font-mono">{row.pctChange !== 'N/A' ? `${row.pctChange}%` : 'N/A'}</td>
-              <td className="p-2 border text-center">{row.pctChangeRating || '-'}</td>
-              <td className="p-2 border text-right">{ComplaintsCell}</td>
-              <td className="p-2 border text-center">{row.complaintRating || '-'}</td>
-              <td className="p-2 border text-center font-bold">{row.finalRating || '-'}</td>
-              <td className="p-2 border text-center w-[150px]">
-                {row.frequency && (
-                  <span className="px-2 py-1 rounded text-white text-xs font-semibold whitespace-nowrap" style={{ backgroundColor: row.frequencyColor }}>
-                    {row.frequency}
-                  </span>
-                )}
-              </td>
-              <td className="p-2 border w-[150px]">{ActionButtons}</td>
-            </tr>
-          );
-        };
-
-        const DecisionMatrixRecordPage = ({ id, records, setRecords, navigate, setScheduledRecords }) => {
-          const record = useMemo(() => records.find(r => r.id === id), [id, records]);
-
-          const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
-          const [isConfirmDeleteRowOpen, setIsConfirmDeleteRowOpen] = useState(false);
-          const [rowToDelete, setRowToDelete] = useState(null);
-          // Only one row can be edited at a time
-          const [editingRowId, setEditingRowId] = useState(null); 
-
-          useEffect(() => {
-            if (!record) {
-              // Redirect if record not found
-              navigate('audit-decision-matrix');
-            }
-          }, [record, navigate]);
-
-          if (!record) return null; // Wait for redirect
-
-          const updateRecordInState = (updatedRecord) => {
-            const newRecords = records.map(r =>
-              r.id === updatedRecord.id ? { ...updatedRecord, updatedAt: new Date().toISOString() } : r
-            );
-            setRecords(newRecords);
-          };
-
-          // --- Rules Handlers ---
-          const handleSaveRules = (newRules) => {
-            const updatedRecord = { ...record, rules: newRules };
-
-            // Recalculate all rows after rules change
-            const recalculatedRows = (record.rows || []).map(row => calculateRowData(row, newRules));
-            updatedRecord.rows = recalculatedRows;
-
-            updateRecordInState(updatedRecord);
-            setIsRulesModalOpen(false);
-          };
-
-          // --- Row Handlers ---
-          const handleAddRow = () => {
-            // Prevent adding a new row if one is already being edited
-            if (editingRowId) {
-                alert("Please save or cancel the current row edit before adding a new row.");
-                return;
-            }
+            if (!isOpen) return null;
             
-            const newRow = {
-              rowId: `r_${v4()}`,
-              appliesToInstance: '',
-              targetPPM: '', // Use empty string to prompt for input
-              actualPPM: '',
-              complaints: '',
-              // Calculated fields will be set on save
-              pctChange: 'N/A',
-              pctChangeRating: null,
-              complaintRating: null,
-              finalRating: null,
-              frequency: null,
-              frequencyColor: null,
+            // Helper function to find the label for an operation symbol
+            const getOperationLabel = (symbol) => {
+                const op = OPERATION_OPTIONS.find(opt => opt.symbol === symbol);
+                return op ? op.label : symbol;
             };
-            // Newest row is added to the beginning of the array for display
-            const updatedRecord = { ...record, rows: [newRow, ...(record.rows || [])] };
-            updateRecordInState(updatedRecord);
-            setEditingRowId(newRow.rowId); // Start editing the new row immediately
-          };
 
-          const handleUpdateRow = (updatedRow) => {
-            const updatedRows = (record.rows || []).map(row =>
-              row.rowId === updatedRow.rowId ? updatedRow : row
-            );
-            const updatedRecord = { ...record, rows: updatedRows };
-            updateRecordInState(updatedRecord);
-          };
+            // Placeholder function for adding a new rule
+            const handleAddRule = (category) => {
+                const newRule = {
+                    id: Date.now(), // Use timestamp for unique ID for now
+                    rating: 0,
+                    operation: OPERATION_OPTIONS[0].symbol,
+                    value: 0,
+                    description: '',
+                    ...(category === 'frequencyMapping' && { times: FREQUENCY_OPTIONS[0], finalRating: 0, highlight: 'bg-green-500' })
+                };
 
-          const handleDeleteRowClick = (rowId) => {
-            setRowToDelete(rowId);
-            setIsConfirmDeleteRowOpen(true);
-          };
+                setConfig(prev => ({
+                    ...prev,
+                    [category]: [...prev[category], newRule]
+                }));
+            };
 
-          const handleConfirmDeleteRow = () => {
-            const updatedRows = (record.rows || []).filter(row => row.rowId !== rowToDelete);
-            const updatedRecord = { ...record, rows: updatedRows };
-            updateRecordInState(updatedRecord);
-            setRowToDelete(null);
-            setIsConfirmDeleteRowOpen(false);
-            setEditingRowId(null); // Ensure no row is left in edit mode
-          };
+            // Placeholder function for deleting a rule
+            const handleDeleteRule = (category, id) => {
+                 setConfig(prev => ({
+                    ...prev,
+                    [category]: prev[category].filter(rule => rule.id !== id)
+                }));
+            };
 
-          // --- Schedule Handler ---
-          const handleSendToSchedule = () => {
-            // Check for uncalculated rows
-            const hasUncalculatedRows = (record.rows || []).some(row => 
-                row.finalRating === null || 
-                row.targetPPM === '' || 
-                row.actualPPM === '' || 
-                row.complaints === ''
-            );
+            // Placeholder function for saving all changes
+            const handleSave = () => {
+                // In a real app, this is where you'd validate and then call onSaveConfig(config);
+                console.log("Configuration saved:", config);
+                onClose();
+            };
 
-            if (hasUncalculatedRows) {
-              alert("Cannot send to schedule. Please ensure all rows are filled and saved, and all decision rules are configured correctly to generate a 'Final Rating' for every row.");
-              return;
-            }
 
-            setScheduledRecords(prev => {
-              // Prevent duplicates by ID: update if exists, add if new
-              const existingIndex = prev.findIndex(r => r.id === record.id);
-              if (existingIndex !== -1) {
-                return prev.map((r, i) => i === existingIndex ? record : r);
-              }
-              return [...prev, record]; // Add new
-            });
-            alert(`Decision Matrix "${record.name}" sent to Audit Schedule successfully!`);
-          };
-
-          // --- Data Display ---
-          const appliesToText = record.appliesToDetail
-            ? `${record.appliesTo} (${record.appliesToDetail})`
-            : record.appliesTo;
-
-          const getRuleSummary = (rules, isFrequency = false) => {
-            return (rules || []).map((r, i) => (
-              <li key={i} className="text-sm">
-                <span className="font-semibold">{isFrequency ? `FR ${r.finalRating} → ` : `R ${r.rating}: `}</span>
-                {isFrequency ? (
-                  <span className="px-2 py-0.5 rounded text-white text-xs font-semibold whitespace-nowrap" style={{ backgroundColor: r.color }}>
-                    {r.frequency}
-                  </span>
-                ) : (
-                  r.description
-                )}
-              </li>
-            ));
-          };
-
-          return (
-            <div className="p-6">
-              {/* Header */}
-              <div className="mb-6 border-b pb-4">
-                <h1 className="text-3xl font-bold mb-1">{record.name}</h1>
-                <p className="text-gray-600">Applies To: <span className="font-medium">{appliesToText}</span> | Coordinator: <span className="font-medium">{record.coordinator}</span></p>
-                {record.description && <p className="mt-2 italic text-sm">{record.description}</p>}
-              </div>
-
-              {/* Rules Banner */}
-              <div className="bg-gray-50 p-4 rounded shadow-inner mb-6">
-                <div className="flex justify-between items-center mb-4 border-b pb-3">
-                  <h2 className="text-xl font-bold">Decision Rules</h2>
-                  <button className={VIEW_BUTTON} onClick={() => setIsRulesModalOpen(true)}>
-                    Configure Rules
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">% Change Rules</h3>
-                    <ul className="list-disc ml-5 space-y-1 text-sm">
-                      {getRuleSummary(record.rules.pctChangeRules)}
-                      {(record.rules.pctChangeRules || []).length === 0 && <li className="text-gray-500">No rules configured.</li>}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Complaint Rules</h3>
-                    <ul className="list-disc ml-5 space-y-1 text-sm">
-                      {getRuleSummary(record.rules.complaintRules)}
-                      {(record.rules.complaintRules || []).length === 0 && <li className="text-gray-500">No rules configured.</li>}
-                    </ul>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Frequency Rules</h3>
-                    <ul className="list-disc ml-5 space-y-1 text-sm">
-                      {getRuleSummary(record.rules.frequencyRules, true)}
-                      {(record.rules.frequencyRules || []).length === 0 && <li className="text-gray-500">No rules configured.</li>}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Decision Matrix Table */}
-              <h2 className="text-xl font-bold mb-3">Matrix Data</h2>
-              <div className="flex justify-end mb-2">
-                <button className={PRIMARY_BUTTON} onClick={handleAddRow} disabled={editingRowId !== null}>
-                  + Add Row
-                </button>
-              </div>
-
-              <div className="overflow-x-auto border rounded-lg shadow-md">
-                <table className="min-w-full table-auto text-sm">
-                  <thead>
-                    <tr className={`${COLORS.tableHeader} text-left text-sm`}>
-                      {['Applies To Instance', 'Target PPM', 'Actual PPM', '% Change', 'PPM Rating', 'Complaints', 'Complaint Rating', 'Final Rating', 'Frequency', 'Action'].map(header => (
-                        <th key={header} className="p-3 border-r last:border-r-0 whitespace-nowrap">{header}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(record.rows || []).length === 0 ? (
-                      <tr><td colSpan="10" className="p-4 text-center text-gray-500">No rows added yet.</td></tr>
-                    ) : (
-                      (record.rows || []).map(row => (
-                        <DecisionMatrixRow
-                          key={row.rowId}
-                          row={row}
-                          rules={record.rules}
-                          onUpdate={handleUpdateRow}
-                          onDelete={handleDeleteRowClick}
-                          // Only set isEditing true if this specific rowId matches the currently editing row
-                          isEditing={editingRowId === row.rowId} 
-                          // The function to change which row is being edited
-                          setIsEditing={(isEditing) => setEditingRowId(isEditing ? row.rowId : null)}
-                        />
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Footer Button */}
-              <div className="mt-6 flex justify-end">
-                <button className={PRIMARY_BUTTON} onClick={handleSendToSchedule}>
-                  Send to Schedule
-                </button>
-              </div>
-
-              {/* Modals */}
-              <RuleConfigModal
-                isOpen={isRulesModalOpen}
-                onClose={() => setIsRulesModalOpen(false)}
-                rules={record.rules}
-                onSave={handleSaveRules}
-              />
-
-              <ConfirmModal
-                isOpen={isConfirmDeleteRowOpen}
-                title="Confirm Row Deletion"
-                message="Are you sure you want to delete this row? This action cannot be undone."
-                onConfirm={handleConfirmDeleteRow}
-                onCancel={() => setIsConfirmDeleteRowOpen(false)}
-              />
-            </div>
-          );
-        };
-
-        // --- Components: Audit Schedule Page (Placeholder) ---
-
-        const AuditSchedulePage = ({ scheduledRecords }) => {
-          return (
-            <div className="p-6">
-              <div className="mb-6 border-b pb-4">
-                <h1 className="text-3xl font-bold">Audit Schedule</h1>
-                <p className="text-gray-600">Records sent from the Audit Decision Matrix.</p>
-              </div>
-
-              <div className="space-y-4">
-                {scheduledRecords.length === 0 ? (
-                  <p className="text-gray-500">No records have been sent to the Audit Schedule.</p>
-                ) : (
-                  scheduledRecords.map(record => (
-                    <div key={record.id} className="p-4 border border-blue-200 rounded-lg shadow-sm bg-blue-50">
-                      <h3 className="text-xl font-bold text-blue-800">{record.name}</h3>
-                      <p className="text-sm text-gray-600">Coordinator: {record.coordinator}</p>
-                      <p className="text-sm text-gray-600">Rows: {record.rows.length} | Last Updated: {new Date(record.updatedAt).toLocaleDateString()}</p>
+            // Helper component for rendering a configuration table
+            const ConfigTable = ({ title, category, headers, data, showPercent = false, showHighlight = false }) => (
+                <div className="space-y-4">
+                    <h4 className="text-lg font-semibold text-gray-800">{title}</h4>
+                    
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {headers.map((header, index) => (
+                                        <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {/* Existing Rules */}
+                                {data.map((rule) => (
+                                    <tr key={rule.id}>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">{rule.rating || rule.times}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                            <span className="font-mono text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md mr-1">{rule.operation}</span>
+                                            {getOperationLabel(rule.operation)}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                            {rule.value || rule.finalRating}
+                                            {showPercent && rule.operation !== 'Between' && '%'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">{rule.description}</td>
+                                        {showHighlight && (
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                                                <div className={`w-4 h-4 rounded-full inline-block ${rule.highlight}`}></div>
+                                            </td>
+                                        )}
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                            <div className="flex space-x-2">
+                                                <button title="Edit Rule" className="text-indigo-500 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50 transition"><Pencil className="w-4 h-4" /></button>
+                                                <button 
+                                                    title="Delete Rule" 
+                                                    onClick={() => handleDeleteRule(category, rule.id)}
+                                                    className="text-red-500 hover:text-red-600 p-1 rounded-full hover:bg-red-50 transition"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {/* Add New Rule Row (Simplified for now) */}
+                                <tr>
+                                    <td className="p-2 border-t text-sm">
+                                        {category !== 'frequencyMapping' && (
+                                            <input type="number" placeholder="Rating" className="p-1 border rounded-md w-16 text-center" min="1" max="5"/>
+                                        )}
+                                        {category === 'frequencyMapping' && (
+                                            <select className="p-1 border rounded-md w-full text-center">
+                                                {FREQUENCY_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                                            </select>
+                                        )}
+                                    </td>
+                                    <td className="p-2 border-t text-sm">
+                                        <select className="p-1 border rounded-md w-full">
+                                            {OPERATION_OPTIONS.map(op => <option key={op.symbol} value={op.symbol}>{op.symbol} - {op.label}</option>)}
+                                        </select>
+                                    </td>
+                                    <td className="p-2 border-t text-sm flex items-center space-x-1">
+                                        <input type="text" placeholder="Value" className="p-1 border rounded-md w-24 text-center"/>
+                                        {showPercent && <span className="text-gray-500">%</span>}
+                                    </td>
+                                    <td className="p-2 border-t text-sm">
+                                        <input type="text" placeholder="Description" className="p-1 border rounded-md w-full"/>
+                                    </td>
+                                    {showHighlight && (
+                                        <td className="p-2 border-t text-sm">
+                                            <select className="p-1 border rounded-md w-full">
+                                                {/* Mock colors for highlight */}
+                                                <option value="bg-green-500">Green</option>
+                                                <option value="bg-red-500">Red</option>
+                                                <option value="bg-orange-500">Orange</option>
+                                            </select>
+                                        </td>
+                                    )}
+                                    <td className="p-2 border-t text-sm">
+                                        <button 
+                                            onClick={() => handleAddRule(category)}
+                                            className="px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition flex items-center text-xs"
+                                        >
+                                            <Plus className="w-3 h-3 mr-1"/> Add
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          );
+                </div>
+            );
+
+
+            return (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 transition-opacity">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl transition-transform transform scale-100 max-h-[90vh] flex flex-col">
+                        
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-gray-800">
+                                Configure Rating Guidelines
+                            </h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body (Tables) */}
+                        <div className="p-6 space-y-8 overflow-y-auto flex-1">
+                            
+                            {/* 1. % Change Rating Table */}
+                            <ConfigTable
+                                title="% Change Rating"
+                                category="percentChangeRating"
+                                headers={['Rating', 'Operation (If % Change)', '% Change', 'Description', 'Actions']}
+                                data={config.percentChangeRating}
+                                showPercent={true}
+                            />
+                            
+                            {/* 2. Customer Complaints Rating Table */}
+                            <ConfigTable
+                                title="Customer Complaint Rating"
+                                category="customerComplaintsRating"
+                                headers={['Rating', 'Operation (If Customer Complaint Count)', 'Customer Complaint Count', 'Description', 'Actions']}
+                                data={config.customerComplaintsRating}
+                                showPercent={false}
+                            />
+
+                            {/* 3. Frequency Mapping Table */}
+                            <ConfigTable
+                                title="Frequency"
+                                category="frequencyMapping"
+                                headers={['Times', 'Operation (If Final Rating)', 'Final Rating', 'Description', 'Highlight', 'Actions']}
+                                data={config.frequencyMapping}
+                                showPercent={false}
+                                showHighlight={true}
+                            />
+
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-xl border-t">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg shadow-sm hover:bg-gray-100 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                            >
+                                <Save className="w-4 h-4 inline mr-1" /> Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
-        // --- Main Application Component ---
+        /**
+         * Row Component for Matrix Data
+         */
+        const MatrixRow = ({ initialData, initialIsEditing = false, onSave, onDelete }) => {
+            const [isEditing, setIsEditing] = useState(initialIsEditing);
+            const [editData, setEditData] = useState(initialData);
 
+            // Recalculate metrics whenever target, actualPPM, or complaints change
+            const metrics = calculateMetrics(editData.target, editData.actualPPM, editData.complaints);
+            
+            // Merge calculated metrics back into the row data for display
+            const rowData = { ...editData, ...metrics };
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setEditData(prev => ({
+                    ...prev,
+                    [name]: name === 'target' || name === 'actualPPM' || name === 'complaints'
+                        // Allow empty string ('') for empty input fields, but enforce non-negative numbers otherwise.
+                        ? (value === '' ? '' : Math.max(0, Number(value))) 
+                        : value
+                }));
+            };
+
+            const handleSave = () => {
+                // Prepare the data to be sent back to the parent component/database
+                const cleanedData = {
+                    ...rowData,
+                    // Convert potential empty strings back to 0 for storage/calculations
+                    target: Number(rowData.target) || 0, 
+                    actualPPM: Number(rowData.actualPPM) || 0,
+                    complaints: Number(rowData.complaints) || 0,
+                };
+                
+                // Remove the temporary 'isNew' flag used for initial editing state
+                if (cleanedData.isNew) {
+                    delete cleanedData.isNew;
+                }
+
+                onSave(rowData.id, cleanedData);
+                setIsEditing(false);
+            };
+
+            const handleEdit = () => {
+                setIsEditing(true);
+            };
+
+
+            return (
+                <tr className="hover:bg-gray-50 transition duration-150">
+                    {/* 1. LINE (Dropdown/Text) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {isEditing ? (
+                            <select
+                                name="line"
+                                value={editData.line}
+                                onChange={handleChange}
+                                className="p-1 border border-gray-300 rounded-md w-full focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                                {LINE_OPTIONS.map(line => (
+                                    <option key={line} value={line}>{line}</option>
+                                ))}
+                            </select>
+                        ) : (
+                            rowData.line
+                        )}
+                    </td>
+
+                    {/* 2. TARGET (Numeric Input) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {isEditing ? (
+                            <input
+                                type="number"
+                                name="target"
+                                value={editData.target}
+                                onChange={handleChange}
+                                min="0"
+                                placeholder="0"
+                                className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                        ) : (
+                            rowData.target
+                        )}
+                    </td>
+
+                    {/* 3. ASSEMBLY PPM (Numeric Input) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                        {isEditing ? (
+                            <input
+                                type="number"
+                                name="actualPPM"
+                                value={editData.actualPPM}
+                                onChange={handleChange}
+                                min="0"
+                                placeholder="0"
+                                className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                        ) : (
+                            rowData.actualPPM
+                        )}
+                    </td>
+
+                    {/* 4. % CHANGE (Auto Calculate) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-semibold text-indigo-600">
+                        {rowData.change}
+                    </td>
+
+                    {/* 5. RATING (% Change) (Auto Calculate) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-center">
+                        {rowData.changeRating}
+                    </td>
+
+                    {/* 6. CUSTOMER COMPLAINTS (Numeric Input) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                        {isEditing ? (
+                            <input
+                                type="number"
+                                name="complaints"
+                                value={editData.complaints}
+                                onChange={handleChange}
+                                min="0"
+                                placeholder="0"
+                                className="p-1 border border-gray-300 rounded-md w-24 text-center focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                        ) : (
+                            rowData.complaints
+                        )}
+                    </td>
+
+                    {/* 7. RATING (Complaints) (Auto Calculate) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold text-center">
+                        {rowData.complaintsRating}
+                    </td>
+
+                    {/* 8. FINAL RATING (Auto Calculate) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-extrabold text-center">
+                        {rowData.finalRating}
+                    </td>
+
+                    {/* 9. FREQUENCY (Auto Calculate) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
+                        <Badge type="Frequency">{rowData.frequency}</Badge>
+                    </td>
+
+                    {/* 10. ACTIONS (Edit/Save & Delete) */}
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-center">
+                        <div className="flex space-x-3 justify-center">
+                            {isEditing ? (
+                                <button 
+                                    onClick={handleSave} 
+                                    className="text-green-500 hover:text-green-600 transition p-1 rounded-full hover:bg-green-50" 
+                                    title="Save Row"
+                                >
+                                    <Save className="w-4 h-4" />
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={handleEdit} 
+                                    className="text-indigo-500 hover:text-indigo-600 transition p-1 rounded-full hover:bg-indigo-50" 
+                                    title="Edit Row"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => onDelete(rowData.id)} 
+                                className="text-red-500 hover:text-red-600 transition p-1 rounded-full hover:bg-red-50" 
+                                title="Delete Row"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            );
+        };
+
+
+        // --- Main Page Components ---
+
+        /**
+         * Audit Records Listing Page (Uses AuditRecordModal)
+         */
+        const AuditRecordsListing = ({ onViewDetails }) => {
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingRecord, setEditingRecord] = useState(null); // Holds the record data if editing, or null if creating
+            const [records, setRecords] = useState(initialAuditRecordsData); // Use state for records
+
+            // --- CRUD Handlers ---
+
+            // Handles creation (if record has no ID) or updating (if record has ID)
+            const handleSaveRecord = (recordToSave) => {
+                if (recordToSave.id) {
+                    // Update existing record
+                    setRecords(prev => prev.map(r => r.id === recordToSave.id ? recordToSave : r));
+                } else {
+                    // Create new record
+                    const newRecord = {
+                        ...recordToSave,
+                        id: Math.max(...records.map(r => r.id), 0) + 1,
+                    };
+                    setRecords(prev => [newRecord, ...prev]);
+                }
+            };
+            
+            // Handles deletion
+            const handleDeleteRecord = (id) => {
+                setRecords(prev => prev.filter(r => r.id !== id));
+            };
+
+            // --- Modal Control Functions ---
+
+            const handleOpenCreate = () => {
+                setEditingRecord(null); // Ensure modal is in Create mode
+                setIsModalOpen(true);
+            };
+
+            const handleOpenEdit = (record) => {
+                setEditingRecord(record); // Pass the data for pre-population
+                setIsModalOpen(true);
+            };
+
+            const handleCloseModal = () => {
+                setIsModalOpen(false);
+                setEditingRecord(null); // Clear editing state when closing
+            };
+
+            // Lucide Icons
+            const ClipboardList = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="10" x2="14" y1="11" y2="11"/><line x1="10" x2="16" y1="15" y2="15"/><line x1="10" x2="12" y1="19" y2="19"/></svg>;
+            const Eye = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+                            <ClipboardList className="w-6 h-6 mr-3 text-indigo-600" />
+                            Audit Metrix Listing
+                        </h2>
+                        <button 
+                            onClick={handleOpenCreate} 
+                            className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                        >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Create New Record
+                        </button>
+                    </div>
+                    
+                    <p className="text-sm text-gray-600 mb-6">
+                    <span className="font-semibold text-indigo-600">Manage Audits:</span> Use the **Edit** and **Delete** actions below to modify existing records.
+                    </p>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                            <tr>
+                                {['NAME', 'COORDINATORS', 'AUDITEE', 'STATUS', 'ACTIONS'].map((header) => (
+                                <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    {header}
+                                </th>
+                                ))}
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                            {records.map((item) => (
+                                <tr key={item.id} className="hover:bg-indigo-50 transition duration-150">
+                                <td className="px-6 py-4 whitespace-normal text-sm font-medium text-gray-900 max-w-xs">
+                                    {item.name}
+                                </td>
+                                <td className="px-6 py-4 whitespace-normal text-sm text-gray-500 max-w-xs">
+                                    {item.coordinators.join(', ')}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <Badge type="Auditee">{item.auditee}</Badge>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <Badge type="Status">{item.status}</Badge>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <div className="flex space-x-3 text-gray-500">
+                                        {/* 1. Edit Action - Opens Modal with data */}
+                                        <button 
+                                            onClick={() => handleOpenEdit(item)}
+                                            className="text-indigo-500 hover:text-indigo-600 transition" 
+                                            title="Edit Record"
+                                        >
+                                            <Pencil className="w-4 h-4" />
+                                        </button>
+                                        {/* 2. View Action - Triggers the page change */}
+                                        <button 
+                                            onClick={() => onViewDetails(item.id, item.name, item.matrixData)} 
+                                            className="text-green-500 hover:text-green-600 transition" 
+                                            title="View Decision Matrix"
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        {/* 3. Delete Action - Deletes the record */}
+                                        <button 
+                                            onClick={() => handleDeleteRecord(item.id)}
+                                            className="text-red-500 hover:text-red-600 transition" 
+                                            title="Delete Record"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        {records.length === 0 && (
+                            <div className="text-center py-6 text-gray-500">
+                                No audit records found. Create a new one to get started!
+                            </div>
+                        )}
+                    </div>
+
+                    {/* The Modal Component (used for both Create and Edit) */}
+                    <AuditRecordModal
+                        isOpen={isModalOpen}
+                        onClose={handleCloseModal}
+                        initialData={editingRecord} // Pass the data if editing, or null if creating
+                        onSave={handleSaveRecord}
+                    />
+                </div>
+            );
+        };
+
+        /**
+         * Audit Decision Matrix Detail Page (Uses RatingConfigModal and MatrixRow)
+         */
+        const AuditDecisionMatrixDetail = ({ auditName, onBack, initialMatrixData }) => {
+            // State for the matrix data rows
+            const [matrixData, setMatrixData] = useState(initialMatrixData || []);
+            // Ensure nextId starts higher than existing IDs (including those in matrixData, or 1 if empty)
+            const [nextId, setNextId] = useState(
+                (initialMatrixData && initialMatrixData.length > 0) 
+                    ? Math.max(...initialMatrixData.map(d => d.id)) + 1 
+                    : 1
+            );
+            
+            // State to control the visibility of the configuration modal
+            const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+            // State for the rating configuration (using mock data for now)
+            const [ratingConfig, setRatingConfig] = useState(initialConfig);
+
+            const handleSaveRow = useCallback((id, updatedData) => {
+                // Destructure and remove the temporary 'isNew' flag from the data object
+                const { isNew, ...dataToSave } = updatedData;
+
+                setMatrixData(prev => prev.map(row => 
+                    row.id === id 
+                        ? { ...dataToSave } // Save the cleaned data without 'isNew'
+                        : row
+                ));
+            }, []);
+
+            const handleDeleteRow = useCallback((id) => {
+                setMatrixData(prev => prev.filter(row => row.id !== id));
+            }, []);
+            
+            const handleAddRow = () => {
+                const newRow = {
+                    id: nextId,
+                    line: LINE_OPTIONS[0],
+                    target: '', // Empty string to show an empty field
+                    actualPPM: '', // Empty string to show an empty field
+                    complaints: '', // Empty string to show an empty field
+                    isNew: true, // Flag to indicate this row should start in edit mode
+                };
+                setMatrixData(prev => [...prev, newRow]);
+                setNextId(prev => prev + 1);
+            };
+            
+            // Function to update rating configuration (for future implementation)
+            const handleSaveConfig = (newConfig) => {
+                setRatingConfig(newConfig);
+                setIsConfigModalOpen(false);
+            };
+
+
+            // Lucide Icons
+            const ArrowLeft = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>;
+            const Download = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+            const Upload = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
+
+
+            // Helper for table rendering
+            const tableHeaders = ['LINE', 'TARGET', 'ASSEMBLY PPM', '% CHANGE', 'RATING', 'CUSTOMER COMPLAINTS', 'RATING', 'FINAL RATING', 'FREQUENCY', 'ACTIONS'];
+
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-xl shadow-lg">
+                    {/* Header with Back Button */}
+                    <div className="flex items-center mb-6 pb-4 border-b">
+                        <button onClick={onBack} className="text-gray-500 hover:text-indigo-600 transition mr-4 p-2 rounded-full hover:bg-gray-100">
+                            <ArrowLeft className="w-6 h-6" />
+                        </button>
+                        <h2 className="text-2xl font-bold text-gray-800 flex-1">
+                            Audit Decision Matrix: <span className="text-indigo-600">{auditName}</span>
+                        </h2>
+                    </div>
+
+                    {/* Rating Guidelines Section */}
+                    <div className="bg-indigo-50 p-6 rounded-xl mb-8 relative">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xl font-semibold text-gray-800">Rating Guidelines</h3>
+                            <button 
+                                onClick={() => setIsConfigModalOpen(true)}
+                                className="flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition"
+                            >
+                                Configure
+                            </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                            {/* % Change Rating Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">% Change Rating:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.percentChangeRating.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.rating}** - {rule.description}* ({rule.operation} {rule.value}{rule.operation !== 'Between' && '%'})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            {/* Customer Complaints Rating Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">Customer Complaints Rating:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.customerComplaintsRating.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.rating}** - {rule.description}* ({rule.operation} {rule.value})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            {/* Frequency Mapping Display */}
+                            <div>
+                                <h4 className="font-bold text-gray-700 mb-2">Frequency Mapping:</h4>
+                                <ul className="list-disc list-inside space-y-1 text-gray-600">
+                                    {ratingConfig.frequencyMapping.map(rule => (
+                                        <li key={rule.id}>
+                                            **{rule.times}** - Final Rating {rule.operation} {rule.finalRating} ({rule.description})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Matrix Data Section */}
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">Matrix Data</h3>
+                    
+                    <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center mb-4 space-y-3 sm:space-y-0 sm:space-x-3">
+                        <div className="flex space-x-3 w-full sm:w-auto justify-end">
+                            <button className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                                <Download className="w-4 h-4 mr-2" /> Download Import Format
+                            </button>
+                            <button className="flex items-center px-3 py-2 text-sm text-green-700 bg-green-100 rounded-lg hover:bg-green-200 transition font-medium">
+                                <Upload className="w-4 h-4 mr-2" /> Excel Import
+                            </button>
+                            <button 
+                                onClick={handleAddRow}
+                                className="flex items-center px-3 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition font-medium"
+                            >
+                                <Plus className="w-4 h-4 mr-1" /> Add
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Data Table */}
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {tableHeaders.map((header, index) => (
+                                        <th key={index} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            {header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {matrixData.map((item) => (
+                                    <MatrixRow
+                                        key={item.id}
+                                        // If the item has the 'isNew' flag, start it in edit mode
+                                        initialIsEditing={!!item.isNew} 
+                                        initialData={item}
+                                        onSave={handleSaveRow}
+                                        onDelete={handleDeleteRow}
+                                    />
+                                ))}
+                                {matrixData.length === 0 && (
+                                    <tr>
+                                        <td colSpan={10} className="text-center py-6 text-gray-500">
+                                            No matrix data available. Click 'Add' to start.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {/* Rating Configuration Modal */}
+                    <RatingConfigModal
+                        isOpen={isConfigModalOpen}
+                        onClose={() => setIsConfigModalOpen(false)}
+                        initialConfig={ratingConfig}
+                        onSaveConfig={handleSaveConfig}
+                    />
+                    
+                </div>
+            );
+        };
+
+
+        // --- Audit Schedule Page ---
+
+        const AuditSchedule = () => {
+            // Lucide Icons
+            const Briefcase = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-briefcase"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M12 12h.01"/></svg>;
+
+            return (
+                <div className="p-6 bg-white rounded-xl shadow-lg">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Audit Schedule</h2>
+                    <p className="text-gray-600 mb-4">
+                      Upcoming and ongoing audit projects with key dates and status updates.
+                    </p>
+
+                    <div className="space-y-4">
+                      {ScheduleData.map((audit) => (
+                        <div key={audit.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-100 rounded-lg hover:border-indigo-400 transition duration-150 ease-in-out">
+                          <div className="flex-1 min-w-0 mb-2 sm:mb-0">
+                            <p className="text-lg font-semibold text-gray-900 truncate">{audit.title}</p>
+                            <p className="text-sm text-gray-500">Lead: {audit.lead}</p>
+                          </div>
+                          <div className="flex items-center space-x-4">
+                            <div className="text-right">
+                              <p className="text-sm font-medium text-gray-700">Dates</p>
+                              <p className="text-xs text-gray-500">{audit.startDate} - {audit.endDate}</p>
+                            </div>
+                            <span className={`px-4 py-1.5 inline-flex text-sm leading-5 font-semibold rounded-full ${
+                              audit.status === 'In Progress' ? 'bg-indigo-100 text-indigo-800' :
+                              audit.status === 'Planned' ? 'bg-green-100 text-green-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {audit.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="mt-6 w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition">
+                        Add New Audit
+                    </button>
+                </div>
+            );
+        };
+
+
+        // --- Navigation and App Components ---
+
+        /**
+         * Navigation item component
+         */
+        const NavItem = ({ icon: Icon, label, isActive, onClick }) => (
+            <button
+                onClick={onClick}
+                className={`
+                  flex items-center w-full px-4 py-3 rounded-xl transition duration-200 ease-in-out
+                  ${isActive
+                    ? 'bg-white/20 text-white' 
+                    : 'text-indigo-200 hover:bg-white/10'
+                  }
+                `}
+              >
+                <Icon className="w-5 h-5 mr-3" />
+                <span className="font-medium">{label}</span>
+            </button>
+        );
+
+        /**
+         * Main application component, handling navigation logic.
+         */
         const App = () => {
-          const { route, params, navigate } = useRoute();
-          const [records, setRecords] = useState(() => getLocalStorageItem(DECISION_RECORDS_KEY, []));
-          const [scheduledRecords, setScheduledRecords] = useState(() => getLocalStorageItem(SCHEDULE_RECORDS_KEY, []));
+            // State to manage the active main view ('Records', 'Schedule', or 'Detail')
+            const [activeView, setActiveView] = useState('Records'); 
+            // State to hold data for the currently viewed record detail
+            const [currentAudit, setCurrentAudit] = useState(null); 
 
-          // Sync state to localStorage on change
-          useEffect(() => {
-            setLocalStorageItem(DECISION_RECORDS_KEY, records);
-          }, [records]);
+            // Function to navigate to the detailed matrix view
+            const handleViewDetails = (id, name, matrixData) => {
+                setCurrentAudit({ id, name, matrixData });
+                setActiveView('Detail');
+            };
 
-          useEffect(() => {
-            setLocalStorageItem(SCHEDULE_RECORDS_KEY, scheduledRecords);
-          }, [scheduledRecords]);
+            // Function to navigate back to the listing view
+            const handleBackToListing = () => {
+                setCurrentAudit(null);
+                setActiveView('Records');
+            };
 
-          // Main Content Router
-          const renderMainContent = () => {
-            switch (route) {
-              case 'audit-decision-matrix':
-                return <AuditDecisionMatrixListing navigate={navigate} records={records} setRecords={setRecords} />;
-              case 'decision-matrix':
-                return <DecisionMatrixRecordPage id={params.id} records={records} setRecords={setRecords} navigate={navigate} setScheduledRecords={setScheduledRecords} />;
-              case 'audit-schedule':
-                return <AuditSchedulePage scheduledRecords={scheduledRecords} />;
-              default:
-                // Default to the main listing page
-                return <AuditDecisionMatrixListing navigate={navigate} records={records} setRecords={setRecords} />;
-            }
-          };
+            // Function to render the correct content component
+            const renderContent = () => {
+                switch (activeView) {
+                    case 'Records':
+                        return <AuditRecordsListing onViewDetails={handleViewDetails} />;
+                    case 'Schedule':
+                        return <AuditSchedule />;
+                    case 'Detail':
+                        // Ensure we have data before rendering the detail page
+                        if (currentAudit) {
+                            return (
+                                <AuditDecisionMatrixDetail 
+                                    auditName={currentAudit.name} 
+                                    initialMatrixData={currentAudit.matrixData}
+                                    onBack={handleBackToListing} 
+                                />
+                            );
+                        }
+                        return <AuditRecordsListing onViewDetails={handleViewDetails} />; // Fallback
+                    default:
+                        return <AuditRecordsListing onViewDetails={handleViewDetails} />;
+                }
+            };
+            
+            // Lucide Icons
+            const CalendarCheck = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calendar-check"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>;
+            const ClipboardList = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="10" x2="14" y1="11" y2="11"/><line x1="10" x2="16" y1="15" y2="15"/><line x1="10" x2="12" y1="19" y2="19"/></svg>;
+            const CheckCircle = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-check-circle"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>;
+            const Settings = (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.44a2 2 0 0 1-2 2H4.44a2 2 0 0 0-2 2v.44a2 2 0 0 1 2 2h.44a2 2 0 0 0 2 2v.44a2 2 0 0 1 2 2h.44a2 2 0 0 0 2 2v.44a2 2 0 0 1 2 2h.44a2 2 0 0 0 2-2v-.44a2 2 0 0 1 2-2h.44a2 2 0 0 0 2-2v-.44a2 2 0 0 1-2-2h-.44a2 2 0 0 0-2-2v-.44a2 2 0 0 1-2-2h-.44a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>;
 
-          return (
-            <div className="flex min-h-screen font-sans">
-              {/* Sidebar */}
-              <Sidebar navigate={navigate} activeRoute={route} />
 
-              {/* Main Content Area */}
-              <div className="ml-[220px] flex-grow bg-gray-50">
-                {renderMainContent()}
-              </div>
-            </div>
-          );
+            return (
+                <div className="min-h-screen bg-gray-50 flex" style={{ fontFamily: 'Inter, sans-serif' }}>
+                    
+                    {/* 1. Sidebar Navigation */}
+                    <nav className="hidden md:flex flex-col w-64 bg-indigo-900 p-4 shadow-2xl">
+                        <div className="flex items-center text-white text-xl font-bold mb-10 tracking-wider h-16 border-b border-white/10">
+                            <CheckCircle className="w-6 h-6 mr-2 text-green-400" />
+                            Audit Planner
+                        </div>
+
+                        <div className="space-y-2 flex-1">
+                            <NavItem
+                                icon={ClipboardList}
+                                label="Audit Metrix"
+                                isActive={activeView === 'Records' || activeView === 'Detail'}
+                                onClick={handleBackToListing}
+                            />
+                            <NavItem
+                                icon={CalendarCheck}
+                                label="Audit Schedule"
+                                isActive={activeView === 'Schedule'}
+                                onClick={() => setActiveView('Schedule')}
+                            />
+                        </div>
+
+                        {/* Settings button at the bottom */}
+                        <div className="pt-4 border-t border-white/10">
+                             <button className="flex items-center w-full px-4 py-3 rounded-xl text-indigo-200 hover:bg-white/10 transition">
+                                <Settings className="w-5 h-5 mr-3" />
+                                <span className="font-medium">Settings</span>
+                            </button>
+                        </div>
+                    </nav>
+
+                    {/* 2. Main Content Area */}
+                    <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+                        
+                        {/* Mobile Header/Navigation */}
+                        <header className="md:hidden sticky top-0 z-10 bg-white p-4 mb-4 rounded-xl shadow-md">
+                            <h1 className="text-xl font-bold text-gray-800 mb-3">Audit Planner</h1>
+                            <div className="flex space-x-2">
+                                <button
+                                    className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition ${activeView === 'Records' || activeView === 'Detail' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                    onClick={handleBackToListing}
+                                >
+                                    Audit Records
+                                </button>
+                                <button
+                                    className={`flex-1 py-2 px-3 text-sm font-medium rounded-lg transition ${activeView === 'Schedule' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                    onClick={() => setActiveView('Schedule')}
+                                >
+                                    Audit Schedule
+                                </button>
+                            </div>
+                        </header>
+
+                        <div className="w-full max-w-7xl mx-auto">
+                            {/* Render the active content view */}
+                            {renderContent()}
+                        </div>
+
+                    </main>
+                </div>
+            );
         };
 
-        // --- Render the App ---
-        const rootElement = document.getElementById('root');
-        ReactDOM.createRoot(rootElement).render(<React.StrictMode><App /></React.StrictMode>);
+        // Render the application
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
     </script>
 </body>
 </html>
