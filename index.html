@@ -1,594 +1,217 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Audit Planner — Decision Matrix</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Audit Planner — Decision Matrix</title>
 
-  <!-- Tailwind Play CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* extra tweaks */
-    html,body,#root{height:100%}
-    body{font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial}
-    /* custom small widths for table inputs */
-    .input-xs{width:94px}
-  </style>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React + ReactDOM (UMD) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <!-- Babel for JSX transform in-browser -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-</head>
-<body class="bg-slate-50">
-  <div id="root" class="h-full"></div>
+    <!-- React + ReactDOM (Development Mode) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 
-  <script type="text/babel">
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
 
-// ---------- Helpers ----------
-const { useState, useEffect, useMemo } = React;
+  <body class="bg-gray-100 text-gray-800">
+    <div id="root"></div>
 
-const LS_KEYS = { RECORDS: 'auditDecisionRecords_v1', SCHEDULE: 'auditScheduleRecords_v1' };
-const uid = (p='id') => `${p}_${Math.random().toString(36).slice(2,10)}`;
-const isoNow = () => new Date().toISOString();
-const clamp = (v,min,max)=> Math.max(min,Math.min(max,v));
-const round2 = v => (v===null||v===undefined||Number.isNaN(v))? null : Math.round((v+Number.EPSILON)*100)/100;
+    <script type="text/babel">
+      const { useState } = React;
 
-function loadRecords(){ try{ return JSON.parse(localStorage.getItem(LS_KEYS.RECORDS) || 'null') || [] }catch(e){ return [] } }
-function saveRecords(arr){ localStorage.setItem(LS_KEYS.RECORDS, JSON.stringify(arr)) }
-function loadSchedule(){ try{ return JSON.parse(localStorage.getItem(LS_KEYS.SCHEDULE) || 'null') || [] }catch(e){ return [] } }
-function saveSchedule(arr){ localStorage.setItem(LS_KEYS.SCHEDULE, JSON.stringify(arr)) }
+      function App() {
+        const [records, setRecords] = useState(
+          JSON.parse(localStorage.getItem("auditRecords") || "[]")
+        );
+        const [view, setView] = useState("list");
+        const [newRecord, setNewRecord] = useState({ name: "", appliesTo: "", coordinator: "" });
+        const [selectedRecord, setSelectedRecord] = useState(null);
 
-function ensureDemoData(){
-  const exists = loadRecords(); if (exists.length) return;
-  const demo = [
-    {
-      id: uid('dm'),
-      name: 'Line A - Quarterly',
-      appliesTo: 'Line', appliesToDetail: 'Line A',
-      coordinator: 'A. Kumar',
-      description: 'Decision matrix for Line A',
-      createdAt: isoNow(), updatedAt: isoNow(),
-      rows: [
-        { rowId: uid('r'), appliesToInstance:'Line A', targetPPM:100, actualPPM:90, complaints:3, saved:true },
-        { rowId: uid('r'), appliesToInstance:'Line A', targetPPM:200, actualPPM:150, complaints:0, saved:true }
-      ],
-      rules: {
-        pctChangeRules: [
-          { ruleId: uid('pr'), operation:'in_between', min:-999, max:0, value:null, rating:1, description:'1 - Excellent' },
-          { ruleId: uid('pr'), operation:'in_between', min:0.0001, max:20, value:null, rating:2, description:'2 - Good' },
-          { ruleId: uid('pr'), operation:'gt', min:null, max:null, value:20, rating:3, description:'3 - Poor' }
-        ],
-        complaintRules: [
-          { ruleId: uid('cr'), operation:'eq', min:null, max:null, value:0, rating:0, description:'0 - No Complaints' },
-          { ruleId: uid('cr'), operation:'gte', min:null, max:null, value:1, rating:1, description:'1 - Some Complaints' },
-          { ruleId: uid('cr'), operation:'gt', min:null, max:null, value:5, rating:2, description:'2 - Many Complaints' }
-        ],
-        frequencyRules: [
-          { ruleId: uid('fr'), operation:'in_between', min:0, max:1, value:null, frequency:'Daily', color:'#ef4444' },
-          { ruleId: uid('fr'), operation:'in_between', min:1.0001, max:2, value:null, frequency:'Weekly', color:'#0ea5e9' },
-          { ruleId: uid('fr'), operation:'in_between', min:2.0001, max:5, value:null, frequency:'Monthly', color:'#10b981' },
-          { ruleId: uid('fr'), operation:'gt', min:null, max:null, value:5, frequency:'Yearly', color:'#1e40af' }
-        ]
-      }
-    },
-    {
-      id: uid('dm'),
-      name: 'Supplier - ACME Ltd',
-      appliesTo: 'Supplier', appliesToDetail: 'ACME Ltd',
-      coordinator: 'S. Patel',
-      description: 'Quarterly supplier monitoring',
-      createdAt: isoNow(), updatedAt: isoNow(),
-      rows: [],
-      rules: {
-        pctChangeRules: [
-          { ruleId: uid('pr'), operation:'lte', min:null, max:null, value:5, rating:1, description:'1 - Target met' },
-          { ruleId: uid('pr'), operation:'gt', min:null, max:null, value:5, rating:2, description:'2 - Above threshold' }
-        ],
-        complaintRules: [
-          { ruleId: uid('cr'), operation:'eq', min:null, max:null, value:0, rating:0, description:'0 - No Complaints' },
-          { ruleId: uid('cr'), operation:'gte', min:null, max:null, value:1, rating:1, description:'1 - Complaints present' }
-        ],
-        frequencyRules: [
-          { ruleId: uid('fr'), operation:'gte', min:null, max:null, value:2, frequency:'Monthly', color:'#0ea5e9' },
-          { ruleId: uid('fr'), operation:'lt', min:null, max:null, value:2, frequency:'Yearly', color:'#10b981' }
-        ]
-      }
-    }
-  ];
-  saveRecords(demo);
-}
+        const saveToLocal = (data) => {
+          localStorage.setItem("auditRecords", JSON.stringify(data));
+        };
 
-// ---------- Evaluation Logic ----------
-function recCalcPctChange(target, actual){
-  if (target === null || target === undefined || target === 0) return null;
-  if (actual === null || actual === undefined) return null;
-  return round2(((target - actual) / target) * 100);
-}
-function safeNum(v){ const n = Number(v); return Number.isFinite(n) ? n : null }
-function safeRatingParse(r){ const n = Number(r); return Number.isFinite(n) ? n : r }
+        const addRecord = () => {
+          if (!newRecord.name) return alert("Enter record name");
+          const updated = [...records, { ...newRecord, id: Date.now() }];
+          setRecords(updated);
+          saveToLocal(updated);
+          setNewRecord({ name: "", appliesTo: "", coordinator: "" });
+        };
 
-function evaluateRating(rulesArray=[], value){
-  if (!Array.isArray(rulesArray) || (value===null||value===undefined)) return null;
-  // iterate in order
-  for (const r of rulesArray){
-    if (r.operation === 'in_between'){
-      if (value >= Number(r.min) && value <= Number(r.max)) return safeRatingParse(r.rating);
-    } else {
-      const val = Number(r.value);
-      switch(r.operation){
-        case 'gte': if (value >= val) return safeRatingParse(r.rating); break;
-        case 'lte': if (value <= val) return safeRatingParse(r.rating); break;
-        case 'gt': if (value > val) return safeRatingParse(r.rating); break;
-        case 'lt': if (value < val) return safeRatingParse(r.rating); break;
-        case 'eq': if (value === val) return safeRatingParse(r.rating); break;
-      }
-    }
-  }
-  return null;
-}
+        const deleteRecord = (id) => {
+          const updated = records.filter((r) => r.id !== id);
+          setRecords(updated);
+          saveToLocal(updated);
+        };
 
-function evaluateFrequency(freqRules=[], finalRating){
-  if (!Array.isArray(freqRules) || (finalRating===null||finalRating===undefined)) return null;
-  for (const r of freqRules){
-    if (r.operation === 'in_between'){
-      if (finalRating >= Number(r.min) && finalRating <= Number(r.max)) return { frequency: r.frequency, color: r.color };
-    } else {
-      const val = Number(r.value);
-      switch(r.operation){
-        case 'gte': if (finalRating >= val) return { frequency: r.frequency, color: r.color }; break;
-        case 'lte': if (finalRating <= val) return { frequency: r.frequency, color: r.color }; break;
-        case 'gt': if (finalRating > val) return { frequency: r.frequency, color: r.color }; break;
-        case 'lt': if (finalRating < val) return { frequency: r.frequency, color: r.color }; break;
-        case 'eq': if (finalRating === val) return { frequency: r.frequency, color: r.color }; break;
-      }
-    }
-  }
-  return null;
-}
+        const viewRecord = (record) => {
+          setSelectedRecord(record);
+          setView("matrix");
+        };
 
-// ---------- Components ----------
-function Sidebar({route, setRoute}) {
-  return (
-    <div className="w-56 bg-blue-700 text-white h-full flex flex-col p-4">
-      <div className="text-xl font-semibold mb-4">Audit Planner</div>
-      <button
-        onClick={() => setRoute({view:'list'})}
-        className={`flex items-center gap-3 px-3 py-2 rounded ${route.view==='list' ? 'bg-white text-blue-700 font-semibold' : 'hover:bg-blue-800'}`}
-      >
-        <span>📊</span>
-        <span>Audit Decision Matrix</span>
-      </button>
-      <button
-        onClick={() => setRoute({view:'schedule'})}
-        className={`mt-2 flex items-center gap-3 px-3 py-2 rounded ${route.view==='schedule' ? 'bg-white text-blue-700 font-semibold' : 'hover:bg-blue-800'}`}
-      >
-        <span>🗓️</span>
-        <span>Audit Schedule</span>
-      </button>
-    </div>
-  );
-}
+        if (view === "matrix") {
+          return (
+            <div className="flex min-h-screen">
+              {/* Sidebar */}
+              <aside className="w-64 bg-blue-800 text-white p-5 space-y-3">
+                <h2 className="text-xl font-semibold border-b border-blue-400 pb-2">
+                  Audit Planner
+                </h2>
+                <button
+                  className="w-full text-left py-2 px-3 hover:bg-blue-700 rounded"
+                  onClick={() => setView("list")}
+                >
+                  Audit Decision Matrix
+                </button>
+                <button
+                  className="w-full text-left py-2 px-3 hover:bg-blue-700 rounded"
+                  disabled
+                >
+                  Audit Schedule
+                </button>
+              </aside>
 
-function Topbar({title, onAdd}) {
-  return (
-    <div className="flex items-center justify-between mb-4">
-      <h1 className="text-2xl font-semibold text-slate-800">{title}</h1>
-      <div>
-        <button onClick={onAdd} className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700">+ Add Record</button>
-      </div>
-    </div>
-  );
-}
+              {/* Content */}
+              <main className="flex-1 p-6">
+                <h2 className="text-2xl font-semibold mb-4">{selectedRecord.name}</h2>
+                <p className="mb-6 text-gray-600">
+                  Applies to: <b>{selectedRecord.appliesTo}</b> | Coordinator:{" "}
+                  <b>{selectedRecord.coordinator}</b>
+                </p>
 
-// Create/Edit Record Modal
-function RecordModal({open, onClose, onCreate, existing}) {
-  const [name, setName] = useState(existing?.name || '');
-  const [appliesTo, setAppliesTo] = useState(existing?.appliesTo || 'Line');
-  const [detail, setDetail] = useState(existing?.appliesToDetail || '');
-  const [coord, setCoord] = useState(existing?.coordinator || '');
-  const [desc, setDesc] = useState(existing?.description || '');
-
-  useEffect(()=>{ if (existing){ setName(existing.name||''); setAppliesTo(existing.appliesTo||'Line'); setDetail(existing.appliesToDetail||''); setCoord(existing.coordinator||''); setDesc(existing.description||'') }}, [existing]);
-
-  useEffect(()=>{ if (!open){ setName(''); setAppliesTo('Line'); setDetail(''); setCoord(''); setDesc('') }}, [open]);
-
-  if (!open) return null;
-  const valid = name.trim() && coord.trim();
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl p-6 shadow-lg">
-        <h3 className="text-lg font-semibold mb-4">{existing ? 'Edit Decision Matrix' : 'Create New Decision Matrix'}</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Name *</label>
-            <input value={name} onChange={e=>setName(e.target.value)} className="mt-1 block w-full rounded border px-2 py-1" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Coordinator *</label>
-            <input value={coord} onChange={e=>setCoord(e.target.value)} className="mt-1 block w-full rounded border px-2 py-1" />
-          </div>
-        </div>
-
-        <div className="mt-3">
-          <label className="block text-sm font-medium">Applies To *</label>
-          <div className="flex gap-4 mt-2">
-            <label className="flex items-center gap-2"><input type="radio" name="applies" checked={appliesTo==='Line'} onChange={()=>setAppliesTo('Line')} /> Line</label>
-            <label className="flex items-center gap-2"><input type="radio" name="applies" checked={appliesTo==='Plant'} onChange={()=>setAppliesTo('Plant')} /> Plant</label>
-            <label className="flex items-center gap-2"><input type="radio" name="applies" checked={appliesTo==='Supplier'} onChange={()=>setAppliesTo('Supplier')} /> Supplier</label>
-          </div>
-        </div>
-
-        <div className="mt-3">
-          <label className="block text-sm font-medium">Detail (optional)</label>
-          <input value={detail} onChange={e=>setDetail(e.target.value)} placeholder="Line Identifier / Plant Code / Supplier Name" className="mt-1 block w-full rounded border px-2 py-1" />
-        </div>
-
-        <div className="mt-3">
-          <label className="block text-sm font-medium">Description (optional)</label>
-          <textarea value={desc} onChange={e=>setDesc(e.target.value)} className="mt-1 block w-full rounded border px-2 py-1" rows="3" />
-        </div>
-
-        <div className="mt-4 flex justify-end gap-3">
-          <button onClick={onClose} className="px-3 py-2 rounded bg-slate-200">Cancel</button>
-          <button
-            onClick={()=>{
-              const base = {
-                id: existing ? existing.id : uid('dm'),
-                name: name.trim(),
-                appliesTo,
-                appliesToDetail: detail.trim(),
-                coordinator: coord.trim(),
-                description: desc.trim(),
-                createdAt: existing ? existing.createdAt : isoNow(),
-                updatedAt: isoNow(),
-                rows: existing ? existing.rows || [] : [],
-                rules: existing ? existing.rules || {pctChangeRules:[],complaintRules:[],frequencyRules:[]} : {pctChangeRules:[],complaintRules:[],frequencyRules:[]}
-              };
-              onCreate(base);
-            }}
-            disabled={!valid}
-            className={`px-3 py-2 rounded ${valid ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-300 text-slate-600'}`}
-          >
-            {existing ? 'Save Changes' : 'Create'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Rules Modal (configures three rule lists)
-function RulesModal({open, onClose, record, onSave}) {
-  const [pctRules, setPctRules] = useState(record?.rules?.pctChangeRules || []);
-  const [complaintRules, setComplaintRules] = useState(record?.rules?.complaintRules || []);
-  const [freqRules, setFreqRules] = useState(record?.rules?.frequencyRules || []);
-
-  useEffect(()=>{ if (record){ setPctRules(record.rules.pctChangeRules || []); setComplaintRules(record.rules.complaintRules || []); setFreqRules(record.rules.frequencyRules || []) } }, [record]);
-
-  if (!open) return null;
-
-  const opOptions = [
-    ['in_between','In Between'],
-    ['gte','Greater than or Equal to'],
-    ['lte','Less than or Equal to'],
-    ['gt','Greater than'],
-    ['lt','Less than'],
-    ['eq','Equal to']
-  ];
-
-  const freqOptions = ['Monthly','Yearly','Once Every 2 Years','Weekly','Daily'];
-  const colorOptions = [
-    ['#ef4444','Red'],
-    ['#1e40af','Blue'],
-    ['#10b981','Green'],
-    ['#0ea5e9','Light Blue'],
-    ['#8b5cf6','Purple']
-  ];
-
-  const pushPct = ()=> setPctRules([{ruleId: uid('pr'), operation:'in_between', min:0, max:0, value:null, rating:'', description:''}, ...pctRules]);
-  const pushComp = ()=> setComplaintRules([{ruleId: uid('cr'), operation:'in_between', min:0, max:0, value:null, rating:'', description:''}, ...complaintRules]);
-  const pushFreq = ()=> setFreqRules([{ruleId: uid('fr'), operation:'in_between', min:0, max:0, value:null, frequency:'Monthly', color:'#0ea5e9'}, ...freqRules]);
-
-  const updateArrItem = (arr, setArr, id, key, val) => setArr(arr.map(it=> it.ruleId===id ? ({...it, [key]: val}) : it));
-  const deleteArrItem = (arr, setArr, id) => setArr(arr.filter(it=> it.ruleId !== id));
-
-  const handleSave = ()=>{
-    const newRec = {...record, rules: { pctChangeRules: pctRules, complaintRules: complaintRules, frequencyRules: freqRules }};
-    onSave(newRec);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-auto">
-      <div className="bg-white rounded-lg w-full max-w-6xl p-6 shadow-lg mt-10 mb-10">
-        <h3 className="text-lg font-semibold mb-4">Configure Rules — {record.name}</h3>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-2 border rounded">
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-semibold">% Change Rating Rules</div>
-              <button onClick={pushPct} className="px-2 py-1 rounded bg-blue-600 text-white">+ Add Rule</button>
-            </div>
-            <div className="space-y-2">
-              {pctRules.length===0 && <div className="text-sm text-slate-500">No rules defined.</div>}
-              {pctRules.map(r => (
-                <div key={r.ruleId} className="grid grid-cols-6 gap-2 items-center">
-                  <select value={r.operation} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'operation',e.target.value)} className="col-span-1 rounded border px-2 py-1">
-                    {opOptions.map(o=> <option key={o[0]} value={o[0]}>{o[1]}</option>)}
-                  </select>
-                  <input type="number" value={r.min ?? ''} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'min', e.target.value===''?null:Number(e.target.value))} placeholder="Min" className="rounded border px-2 py-1" />
-                  <input type="number" value={r.max ?? ''} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'max', e.target.value===''?null:Number(e.target.value))} placeholder="Max" className="rounded border px-2 py-1" />
-                  <input type="number" value={r.value ?? ''} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'value', e.target.value===''?null:Number(e.target.value))} placeholder="Value" className="rounded border px-2 py-1" />
-                  <input type="text" value={r.rating ?? ''} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'rating', e.target.value)} placeholder="Rating" className="rounded border px-2 py-1" />
-                  <div className="flex gap-2">
-                    <input type="text" value={r.description ?? ''} onChange={e=>updateArrItem(pctRules,setPctRules,r.ruleId,'description', e.target.value)} placeholder="Description" className="rounded border px-2 py-1" />
-                    <button onClick={()=>deleteArrItem(pctRules,setPctRules,r.ruleId)} className="px-2 py-1 rounded bg-red-500 text-white">Delete</button>
-                  </div>
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <p className="text-gray-500 text-center py-10">
+                    🧩 Decision Matrix Table and Configurable Rules will go here.
+                  </p>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="p-2 border rounded">
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-semibold">Complaint Rating Rules</div>
-              <button onClick={pushComp} className="px-2 py-1 rounded bg-blue-600 text-white">+ Add Rule</button>
+                <button
+                  onClick={() => setView("list")}
+                  className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                >
+                  Back to Listing
+                </button>
+              </main>
             </div>
-            <div className="space-y-2">
-              {complaintRules.length===0 && <div className="text-sm text-slate-500">No rules defined.</div>}
-              {complaintRules.map(r => (
-                <div key={r.ruleId} className="grid grid-cols-6 gap-2 items-center">
-                  <select value={r.operation} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'operation',e.target.value)} className="col-span-1 rounded border px-2 py-1">
-                    {opOptions.map(o=> <option key={o[0]} value={o[0]}>{o[1]}</option>)}
-                  </select>
-                  <input type="number" value={r.min ?? ''} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'min', e.target.value===''?null:Number(e.target.value))} placeholder="Min" className="rounded border px-2 py-1" />
-                  <input type="number" value={r.max ?? ''} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'max', e.target.value===''?null:Number(e.target.value))} placeholder="Max" className="rounded border px-2 py-1" />
-                  <input type="number" value={r.value ?? ''} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'value', e.target.value===''?null:Number(e.target.value))} placeholder="Value" className="rounded border px-2 py-1" />
-                  <input type="text" value={r.rating ?? ''} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'rating', e.target.value)} placeholder="Rating" className="rounded border px-2 py-1" />
-                  <div className="flex gap-2">
-                    <input type="text" value={r.description ?? ''} onChange={e=>updateArrItem(complaintRules,setComplaintRules,r.ruleId,'description', e.target.value)} placeholder="Description" className="rounded border px-2 py-1" />
-                    <button onClick={()=>deleteArrItem(complaintRules,setComplaintRules,r.ruleId)} className="px-2 py-1 rounded bg-red-500 text-white">Delete</button>
-                  </div>
+          );
+        }
+
+        return (
+          <div className="flex min-h-screen">
+            {/* Sidebar */}
+            <aside className="w-64 bg-blue-800 text-white p-5 space-y-3">
+              <h2 className="text-xl font-semibold border-b border-blue-400 pb-2">
+                Audit Planner
+              </h2>
+              <button
+                className="w-full text-left py-2 px-3 bg-blue-700 rounded"
+                onClick={() => setView("list")}
+              >
+                Audit Decision Matrix
+              </button>
+              <button
+                className="w-full text-left py-2 px-3 hover:bg-blue-700 rounded"
+                disabled
+              >
+                Audit Schedule
+              </button>
+            </aside>
+
+            {/* Main Content */}
+            <main className="flex-1 p-6">
+              <h1 className="text-2xl font-bold mb-6 text-blue-700">
+                Audit Decision Matrix — Listing
+              </h1>
+
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-lg font-semibold mb-4">Create New Decision Matrix</h2>
+                <div className="grid grid-cols-3 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={newRecord.name}
+                    onChange={(e) =>
+                      setNewRecord({ ...newRecord, name: e.target.value })
+                    }
+                    className="border p-2 rounded w-full"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Applies To (Line/Plant/Supplier)"
+                    value={newRecord.appliesTo}
+                    onChange={(e) =>
+                      setNewRecord({ ...newRecord, appliesTo: e.target.value })
+                    }
+                    className="border p-2 rounded w-full"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Coordinator"
+                    value={newRecord.coordinator}
+                    onChange={(e) =>
+                      setNewRecord({ ...newRecord, coordinator: e.target.value })
+                    }
+                    className="border p-2 rounded w-full"
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 p-2 border rounded">
-          <div className="flex justify-between items-center mb-2">
-            <div className="font-semibold">Frequency Rules</div>
-            <button onClick={pushFreq} className="px-2 py-1 rounded bg-blue-600 text-white">+ Add Rule</button>
-          </div>
-          <div className="space-y-2">
-            {freqRules.length===0 && <div className="text-sm text-slate-500">No frequency rules defined.</div>}
-            {freqRules.map(r=> (
-              <div key={r.ruleId} className="grid grid-cols-8 gap-2 items-center">
-                <select value={r.operation} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'operation',e.target.value)} className="rounded border px-2 py-1">
-                  {opOptions.map(o=> <option key={o[0]} value={o[0]}>{o[1]}</option>)}
-                </select>
-                <input type="number" value={r.min ?? ''} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'min', e.target.value===''?null:Number(e.target.value))} placeholder="Min" className="rounded border px-2 py-1" />
-                <input type="number" value={r.max ?? ''} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'max', e.target.value===''?null:Number(e.target.value))} placeholder="Max" className="rounded border px-2 py-1" />
-                <input type="number" value={r.value ?? ''} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'value', e.target.value===''?null:Number(e.target.value))} placeholder="Value" className="rounded border px-2 py-1" />
-                <select value={r.frequency} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'frequency', e.target.value)} className="rounded border px-2 py-1">
-                  {freqOptions.map(f=> <option key={f} value={f}>{f}</option>)}
-                </select>
-                <select value={r.color} onChange={e=>updateArrItem(freqRules,setFreqRules,r.ruleId,'color', e.target.value)} className="rounded border px-2 py-1">
-                  {colorOptions.map(c=> <option key={c[0]} value={c[0]}>{c[1]}</option>)}
-                </select>
-                <div className="col-span-1 flex gap-2">
-                  <button onClick={()=>deleteArrItem(freqRules,setFreqRules,r.ruleId)} className="px-2 py-1 rounded bg-red-500 text-white">Delete</button>
-                </div>
+                <button
+                  onClick={addRecord}
+                  className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                >
+                  Add Record
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div className="mt-4 flex justify-end gap-3">
-          <button onClick={onClose} className="px-3 py-2 rounded bg-slate-200">Cancel</button>
-          <button onClick={handleSave} className="px-3 py-2 rounded bg-blue-600 text-white">Save Rules</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Listing page with cards
-function Listing({records, onView, onEdit, onDelete, onCreate}) {
-  return (
-    <div>
-      <Topbar title="Audit Decision Matrix" onAdd={onCreate} />
-      <div>
-        {records.length===0 && (
-          <div className="bg-white p-6 rounded shadow text-slate-600">No Decision Matrix records found. Click + Add Record to create one.</div>
-        )}
-        <div className="space-y-3">
-          {records.map(r => (
-            <div key={r.id} className="bg-white rounded shadow p-4 flex items-center justify-between">
-              <div>
-                <div className="text-lg font-semibold">{r.name}</div>
-                <div className="text-sm text-slate-500">{r.appliesTo}{r.appliesToDetail ? ` (${r.appliesToDetail})` : ''} • Coordinator: {r.coordinator}</div>
-                {r.description && <div className="mt-2 text-sm">{r.description}</div>}
+              <div className="mt-8">
+                <h2 className="text-lg font-semibold mb-3">Existing Records</h2>
+                {records.length === 0 ? (
+                  <p className="text-gray-500">No records found.</p>
+                ) : (
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead className="bg-blue-100">
+                      <tr>
+                        <th className="border p-2">Name</th>
+                        <th className="border p-2">Applies To</th>
+                        <th className="border p-2">Coordinator</th>
+                        <th className="border p-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((r) => (
+                        <tr key={r.id} className="text-center">
+                          <td className="border p-2">{r.name}</td>
+                          <td className="border p-2">{r.appliesTo}</td>
+                          <td className="border p-2">{r.coordinator}</td>
+                          <td className="border p-2 space-x-2">
+                            <button
+                              onClick={() => viewRecord(r)}
+                              className="text-blue-600 hover:underline"
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => deleteRecord(r.id)}
+                              className="text-red-600 hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
-              <div className="flex gap-2">
-                <button onClick={()=>onView(r.id)} className="px-3 py-2 rounded bg-blue-600 text-white">View</button>
-                <button onClick={()=>onEdit(r.id)} className="px-3 py-2 rounded bg-slate-200">Edit</button>
-                <button onClick={()=>onDelete(r.id)} className="px-3 py-2 rounded bg-red-500 text-white">Delete</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Record View Page
-function RecordView({record, onBack, onUpdateRecord, onSendToSchedule}) {
-  const [showRulesModal, setShowRulesModal] = useState(false);
-  const [localRec, setLocalRec] = useState(record);
-
-  useEffect(()=> setLocalRec(record), [record]);
-
-  // compute derived values for rows
-  const rowsWithDerived = useMemo(()=> {
-    const rr = (localRec.rows || []).map(row => {
-      const target = safeNum(row.targetPPM); const actual = safeNum(row.actualPPM);
-      const pctChange = recCalcPctChange(target, actual);
-      const pctRating = evaluateRating(localRec.rules?.pctChangeRules||[], pctChange);
-      const complaintRating = evaluateRating(localRec.rules?.complaintRules||[], safeNum(row.complaints));
-      const finalRating = (typeof pctRating === 'number' && typeof complaintRating === 'number') ? round2(pctRating * complaintRating) : null;
-      const freqObj = evaluateFrequency(localRec.rules?.frequencyRules||[], finalRating);
-      return { ...row, pctChange, pctRating, complaintRating, finalRating, frequency: freqObj?.frequency || null, frequencyColor: freqObj?.color || null };
-    });
-    return rr;
-  }, [localRec]);
-
-  function setRowField(rowId, field, value){
-    const next = {...localRec, rows: localRec.rows.map(r => r.rowId === rowId ? {...r, [field]: value} : r) };
-    setLocalRec(next);
-  }
-
-  function saveRow(rowId){
-    const nextRecords = loadRecords().map(r => r.id === localRec.id ? {...localRec, rows: localRec.rows.map(rr => rr.rowId===rowId ? {...rr, saved:true} : rr)} : r);
-    saveRecords(nextRecords);
-    onUpdateRecord && onUpdateRecord(localRec.id, nextRecords.find(r=>r.id===localRec.id));
-    setLocalRec(prev => ({...prev, rows: prev.rows.map(rr => rr.rowId===rowId ? {...rr, saved:true} : rr)}));
-  }
-
-  function addRowTop(){
-    const newRow = { rowId: uid('r'), appliesToInstance: localRec.appliesToDetail || localRec.appliesTo, targetPPM:null, actualPPM:null, complaints:null, saved:false };
-    const next = {...localRec, rows: [newRow, ...(localRec.rows||[])]};
-    saveAndSet(next);
-  }
-
-  function deleteRow(rowId){
-    if (!confirm('Delete this row?')) return;
-    const next = {...localRec, rows: (localRec.rows||[]).filter(r=>r.rowId !== rowId)};
-    saveAndSet(next);
-  }
-
-  function saveAndSet(next){
-    const all = loadRecords().map(r => r.id === next.id ? {...next, updatedAt: isoNow()} : r);
-    saveRecords(all);
-    setLocalRec(next);
-    onUpdateRecord && onUpdateRecord(next.id, next);
-  }
-
-  function openRules(){
-    setShowRulesModal(true);
-  }
-
-  function onRulesSaved(newRec){
-    // persist rules
-    const all = loadRecords().map(r => r.id === newRec.id ? {...r, rules: newRec.rules, updatedAt: isoNow()} : r);
-    saveRecords(all);
-    setLocalRec(prev => ({...prev, rules: newRec.rules}));
-    setShowRulesModal(false);
-  }
-
-  function sendToSchedule(){
-    const schedule = loadSchedule();
-    schedule.push({...localRec, sentAt: isoNow()});
-    saveSchedule(schedule);
-    alert('Record sent to Audit Schedule (saved to localStorage).');
-    onSendToSchedule && onSendToSchedule(localRec.id);
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <button onClick={onBack} className="text-sm text-blue-600 underline">← Back</button>
-          <div className="text-2xl font-semibold mt-2">{localRec.name}</div>
-          <div className="text-sm text-slate-500 mt-1">{localRec.appliesTo}{localRec.appliesToDetail ? ` (${localRec.appliesToDetail})` : ''} • Coordinator: {localRec.coordinator}</div>
-          {localRec.description && <div className="mt-2 text-sm">{localRec.description}</div>}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={()=>document.getElementById(`edit-meta-${localRec.id}`).click()} className="px-3 py-2 rounded bg-slate-200">Edit</button>
-          <button onClick={()=>{ if(confirm('Delete record?')){ const arr=loadRecords().filter(r=>r.id!==localRec.id); saveRecords(arr); window.location.hash = '#/list' }}} className="px-3 py-2 rounded bg-red-500 text-white">Delete</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="bg-white p-3 rounded shadow">
-          <div className="font-semibold mb-1">% Change Rules</div>
-          <div className="text-sm text-slate-600">
-            {(localRec.rules?.pctChangeRules || []).length === 0 ? <div className="text-xs">No rules defined</div> :
-              (localRec.rules.pctChangeRules.map(r=> <div key={r.ruleId}>{r.rating} - {r.description}</div>))
-            }
+            </main>
           </div>
-        </div>
-        <div className="bg-white p-3 rounded shadow">
-          <div className="font-semibold mb-1">Complaint Rules</div>
-          <div className="text-sm text-slate-600">
-            {(localRec.rules?.complaintRules || []).length === 0 ? <div className="text-xs">No rules defined</div> :
-              (localRec.rules.complaintRules.map(r=> <div key={r.ruleId}>{r.rating} - {r.description}</div>))
-            }
-          </div>
-        </div>
-        <div className="bg-white p-3 rounded shadow relative">
-          <div className="font-semibold mb-1">Frequency Rules</div>
-          <div className="text-sm text-slate-600">
-            {(localRec.rules?.frequencyRules || []).length === 0 ? <div className="text-xs">No rules defined</div> :
-              (localRec.rules.frequencyRules.map(r=> <div key={r.ruleId}><span className="inline-block px-2 py-0.5 rounded text-white" style={{background:r.color}}>{r.frequency}</span> {r.operation==='in_between' ? ` ${r.min} - ${r.max}` : r.value!==null? ` ${r.value}` : ''}</div>))
-            }
-          </div>
-          <button onClick={openRules} className="absolute right-3 top-3 px-2 py-1 rounded bg-blue-600 text-white">Configure Rules</button>
-        </div>
-      </div>
+        );
+      }
 
-      <div className="bg-white p-4 rounded shadow mb-4">
-        <div className="flex justify-between items-center mb-2">
-          <div className="font-semibold">Decision Matrix</div>
-          <div>
-            <button onClick={addRowTop} className="px-3 py-1 rounded bg-blue-600 text-white">+ Add Row</button>
-          </div>
-        </div>
-
-        <div className="overflow-auto">
-          <table className="min-w-[1000px] w-full table-auto border-separate border-spacing-0">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="p-2 border">Applies To Instance</th>
-                <th className="p-2 border">Target PPM</th>
-                <th className="p-2 border">Actual PPM</th>
-                <th className="p-2 border">% Change</th>
-                <th className="p-2 border">PPM Rating</th>
-                <th className="p-2 border">Complaints</th>
-                <th className="p-2 border">Complaint Rating</th>
-                <th className="p-2 border">Final Rating</th>
-                <th className="p-2 border">Frequency</th>
-                <th className="p-2 border">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowsWithDerived.map(row => (
-                <tr key={row.rowId} className="even:bg-slate-50">
-                  <td className="p-2 border">
-                    <input className="w-full rounded border px-2 py-1" value={row.appliesToInstance||''} onChange={e=>setRowField(row.rowId,'appliesToInstance', e.target.value)} />
-                  </td>
-                  <td className="p-2 border"><input type="number" className="input-xs rounded border px-2 py-1" value={row.targetPPM ?? ''} onChange={e=>setRowField(row.rowId,'targetPPM', e.target.value===''?null:Number(e.target.value))} /></td>
-                  <td className="p-2 border"><input type="number" className="input-xs rounded border px-2 py-1" value={row.actualPPM ?? ''} onChange={e=>setRowField(row.rowId,'actualPPM', e.target.value===''?null:Number(e.target.value))} /></td>
-                  <td className="p-2 border">{row.pctChange===null ? 'N/A' : `${row.pctChange}%`}</td>
-                  <td className="p-2 border">{row.pctRating===null ? '' : String(row.pctRating)}</td>
-                  <td className="p-2 border"><input type="number" className="input-xs rounded border px-2 py-1" value={row.complaints ?? ''} onChange={e=>setRowField(row.rowId,'complaints', e.target.value===''?null:Number(e.target.value))} /></td>
-                  <td className="p-2 border">{row.complaintRating===null ? '' : String(row.complaintRating)}</td>
-                  <td className="p-2 border">{row.finalRating===null ? '' : String(row.finalRating)}</td>
-                  <td className="p-2 border">{row.frequency ? <span className="px-2 py-0.5 rounded text-white" style={{background: row.frequencyColor}}>{row.frequency}</span> : ''}</td>
-                  <td className="p-2 border">
-                    <div className="flex gap-2">
-                      <button onClick={()=>saveRow(row.rowId)} className="px-2 py-1 rounded bg-blue-600 text-white">Save</button>
-                      <button onClick={()=>deleteRow(row.rowId)} className="px-2 py-1 rounded bg-red-500 text-white">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 flex justify-start">
-          <button onClick={sendToSchedule} className="px-
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
