@@ -1,30 +1,957 @@
-{
-  "id": "dm_<uuid>",
-  "name": "Line A - Q3 2025",
-  "appliesTo": "Supplier",
-  "appliesToDetail": "Acme Ltd",
-  "coordinator": "John Doe",
-  "description": "Optional text",
-  "createdAt": "2025-10-03T12:00:00Z",
-  "updatedAt": "2025-10-03T12:00:00Z",
-  "rows": [
-    {
-      "rowId": "r_<uuid>",
-      "appliesToInstance": "Line A",
-      "targetPPM": 100,
-      "actualPPM": 90,
-      "pctChange": -10,
-      "pctChangeRating": 2,
-      "complaints": 3,
-      "complaintRating": 1,
-      "finalRating": 2,
-      "frequency": "Monthly",
-      "frequencyColor": "#FF9800"
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Audit Decision Matrix</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --primary:#1976D2;
+      --accent:#FF9800;
+      --bg:#F5F5F5;
+      --text:#212121;
+      --muted:#9E9E9E;
+      --danger:#D32F2F;
+      --tableHead:#E3F2FD;
+      --rowHover:#F1F1F1;
+      --sidebar:#263238;
+      --sidebarWidth:220px;
+      font-family: Roboto, sans-serif;
     }
-  ],
-  "rules": {
-    "pctChangeRules": [],
-    "complaintRules": [],
-    "frequencyRules": []
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden}
+    /* Sidebar */
+    .sidebar{width:var(--sidebarWidth);background:var(--sidebar);color:white;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .logo{font-weight:700;font-size:18px;margin-bottom:8px}
+    .nav-item{padding:10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px}
+    .nav-item.active{background:var(--accent);color:#000}
+    .nav-item:hover{background:#37474f}
+    .nav-icon{width:20px;height:20px;display:inline-block}
+    /* Main */
+    .main{flex:1;padding:20px;overflow:auto}
+    .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    h1{margin:0;font-size:20px}
+    .btn{border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:500}
+    .btn-accent{background:var(--accent);color:white}
+    .btn-primary{background:var(--primary);color:white}
+    .btn-cancel{background:var(--muted);color:#000}
+    .btn-danger{background:var(--danger);color:white}
+    /* Cards */
+    .record-card{background:white;border-radius:8px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;justify-content:space-between}
+    .record-meta{display:flex;flex-direction:column;gap:4px}
+    .record-actions{display:flex;gap:8px}
+    .small{font-size:13px;color:var(--muted)}
+    /* Modal */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:40}
+    .modal{background:white;border-radius:8px;padding:16px;width:640px;max-width:96%;max-height:90vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+    .modal h3{margin-top:0}
+    .form-row{display:flex;gap:8px;margin-bottom:10px}
+    .form-col{flex:1;display:flex;flex-direction:column;gap:6px}
+    input[type="text"], textarea, select, input[type="number"]{padding:8px;border-radius:6px;border:1px solid #ddd;font-size:14px}
+    textarea{resize:vertical;min-height:70px}
+    .radio-inline{display:flex;gap:10px;align-items:center}
+    /* Record page */
+    .record-page{background:white;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .banner{display:flex;gap:12px;margin-bottom:12px}
+    .banner-col{flex:1;background:#fff;padding:12px;border-radius:6px;border:1px solid #eee;min-height:86px;position:relative}
+    .banner-head{font-weight:600;margin-bottom:6px}
+    .rules-list{font-size:13px;line-height:1.4;color:#333}
+    .configure-btn{position:absolute;top:12px;right:12px}
+    /* Table */
+    .table-wrap{overflow:auto;background:white;border-radius:6px;padding:8px;border:1px solid #eee}
+    table{width:100%;border-collapse:collapse;min-width:1000px}
+    th,td{padding:8px;border-bottom:1px solid #f0f0f0;text-align:left;font-size:13px}
+    th{background:var(--tableHead);font-weight:600;position:relative}
+    tr:hover td{background:var(--rowHover)}
+    .small-input{width:100px}
+    .action-btn{padding:6px 8px;border-radius:6px;border:0;cursor:pointer}
+    .pill{display:inline-block;padding:4px 8px;border-radius:12px;font-size:12px}
+    .add-top-right{position:absolute;right:12px;top:8px}
+    /* Other */
+    .muted{color:var(--muted)}
+    .flex{display:flex;gap:8px;align-items:center}
+    .gap{height:12px}
+    .center-left{display:flex;align-items:center;gap:12px}
+    /* Responsive */
+    @media (max-width:900px){
+      .sidebar{display:none}
+      body{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar" role="navigation" aria-label="Sidebar">
+    <div class="logo">Audit Planner</div>
+    <div id="nav-matrix" class="nav-item active" role="button" tabindex="0">
+      <span class="nav-icon">📊</span>
+      <span>Audit Decision Matrix</span>
+    </div>
+    <div id="nav-schedule" class="nav-item" role="button" tabindex="0">
+      <span class="nav-icon">🗓️</span>
+      <span>Audit Schedule</span>
+    </div>
+  </div>
+
+  <main class="main" id="main">
+    <div class="topbar">
+      <h1 id="page-title">Audit Decision Matrix</h1>
+      <div>
+        <button id="add-record-btn" class="btn btn-accent">+ Add Record</button>
+      </div>
+    </div>
+
+    <div id="content-area">
+      <!-- Listing Page will go here -->
+      <div id="listing-area"></div>
+    </div>
+  </main>
+
+  <!-- Modal placeholders -->
+  <div id="modal-root" aria-live="polite"></div>
+
+<script>
+/*
+ Single-file Audit Decision Matrix app
+ - localStorage keys: auditDecisionRecords (array), auditScheduleRecords (array)
+ - Demo data loaded if localStorage empty
+*/
+
+// ----- Utilities -----
+function uid(prefix='id'){ return prefix + '_' + Math.random().toString(36).slice(2,10) }
+function nowISO(){ return new Date().toISOString() }
+function qs(sel, root=document){ return root.querySelector(sel) }
+function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)) }
+function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+function round2(v){ if (v===null || v===undefined || Number.isNaN(v)) return null; return Math.round((v + Number.EPSILON) * 100) / 100 }
+
+// ----- LocalStorage helpers -----
+const LS_KEYS = { RECORDS: 'auditDecisionRecords', SCHEDULE:'auditScheduleRecords' }
+function loadRecords(){ return JSON.parse(localStorage.getItem(LS_KEYS.RECORDS) || 'null') || [] }
+function saveRecords(records){ localStorage.setItem(LS_KEYS.RECORDS, JSON.stringify(records)) }
+function loadSchedule(){ return JSON.parse(localStorage.getItem(LS_KEYS.SCHEDULE) || 'null') || [] }
+function saveSchedule(arr){ localStorage.setItem(LS_KEYS.SCHEDULE, JSON.stringify(arr)) }
+
+// ----- Demo data -----
+function ensureDemoData(){
+  if (loadRecords().length) return
+  const demo = [
+    {
+      id: uid('dm'),
+      name: 'Line A - Quarterly',
+      appliesTo: 'Line',
+      appliesToDetail: 'Line A',
+      coordinator: 'A. Kumar',
+      description: 'Decision matrix for Line A - Q2',
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+      rows:[
+        { rowId: uid('r'), appliesToInstance: 'Line A', targetPPM: 100, actualPPM: 90, pctChange: round2(((100-90)/100)*100), pctChangeRating: 2, complaints: 3, complaintRating: 1, finalRating: 2, frequency: 'Monthly', frequencyColor: '#FF9800', saved:true },
+        { rowId: uid('r'), appliesToInstance: 'Line A', targetPPM: 200, actualPPM: 150, pctChange: round2(((200-150)/200)*100), pctChangeRating: 1, complaints: 0, complaintRating: 0, finalRating: 0, frequency: 'Yearly', frequencyColor: '#4CAF50', saved:true }
+      ],
+      rules:{
+        pctChangeRules:[
+          { ruleId: uid('pr'), operation:'in_between', min:-999, max:0, value:null, rating:1, description:'1 - Excellent' },
+          { ruleId: uid('pr'), operation:'in_between', min:0.00001, max:20, value:null, rating:2, description:'2 - Good' },
+          { ruleId: uid('pr'), operation:'gt', min:null, max:null, value:20, rating:3, description:'3 - Poor' }
+        ],
+        complaintRules:[
+          { ruleId: uid('cr'), operation:'eq', min:null, max:null, value:0, rating:0, description:'0 - No Complaints' },
+          { ruleId: uid('cr'), operation:'gte', min:null, max:null, value:1, rating:1, description:'1 - Some Complaints' },
+          { ruleId: uid('cr'), operation:'gt', min:null, max:null, value:5, rating:2, description:'2 - Many Complaints' }
+        ],
+        frequencyRules:[
+          { ruleId: uid('fr'), operation:'in_between', min:0, max:1, value:null, frequency:'Daily', color:'#D32F2F' },
+          { ruleId: uid('fr'), operation:'in_between', min:1.0001, max:2, value:null, frequency:'Weekly', color:'#FF9800' },
+          { ruleId: uid('fr'), operation:'in_between', min:2.0001, max:5, value:null, frequency:'Monthly', color:'#4CAF50' },
+          { ruleId: uid('fr'), operation:'gt', min:null, max:null, value:5, frequency:'Yearly', color:'#1976D2' }
+        ]
+      }
+    },
+    {
+      id: uid('dm'),
+      name: 'Supplier - ACME Ltd',
+      appliesTo: 'Supplier',
+      appliesToDetail: 'ACME Ltd',
+      coordinator: 'S. Patel',
+      description: 'Quarterly supplier monitoring',
+      createdAt: nowISO(),
+      updatedAt: nowISO(),
+      rows:[],
+      rules:{
+        pctChangeRules:[
+          { ruleId: uid('pr'), operation:'lte', min:null, max:null, value:5, rating:1, description:'1 - Target met' },
+          { ruleId: uid('pr'), operation:'gt', min:null, max:null, value:5, rating:2, description:'2 - Above threshold' }
+        ],
+        complaintRules:[
+          { ruleId: uid('cr'), operation:'eq', min:null, max:null, value:0, rating:0, description:'0 - No Complaints' },
+          { ruleId: uid('cr'), operation:'gte', min:null, max:null, value:1, rating:1, description:'1 - Complaints present' }
+        ],
+        frequencyRules:[
+          { ruleId: uid('fr'), operation:'gte', min:null, max:null, value:2, frequency:'Monthly', color:'#FF9800' },
+          { ruleId: uid('fr'), operation:'lt', min:null, max:null, value:2, frequency:'Yearly', color:'#4CAF50' }
+        ]
+      }
+    }
+  ]
+  saveRecords(demo)
+}
+
+// ----- Rendering / Routing -----
+const main = document.getElementById('main')
+const contentArea = document.getElementById('content-area')
+const listingArea = document.getElementById('listing-area')
+const modalRoot = document.getElementById('modal-root')
+const navMatrix = document.getElementById('nav-matrix')
+const navSchedule = document.getElementById('nav-schedule')
+const pageTitle = document.getElementById('page-title')
+
+let appState = { view: 'listing', currentId: null } // 'listing' or 'record' or 'schedule'
+
+function navigateTo(view, id=null, push=true){
+  appState.view = view
+  appState.currentId = id
+  renderNavActive()
+  if (push) {
+    const url = view === 'listing' ? '/' : view === 'schedule' ? '/schedule' : `/decision-matrix/${id}`
+    history.pushState({view,id}, '', url)
+  }
+  renderView()
+}
+window.onpopstate = (e)=> {
+  const state = e.state
+  if (!state) { navigateTo('listing', null, false); return }
+  navigateTo(state.view, state.id, false)
+}
+
+function renderNavActive(){
+  navMatrix.classList.toggle('active', appState.view === 'listing' || appState.view === 'record')
+  navSchedule.classList.toggle('active', appState.view === 'schedule')
+}
+
+// ----- Listing Page -----
+function renderListing(){
+  pageTitle.innerText = 'Audit Decision Matrix'
+  listingArea.innerHTML = ''
+  const records = loadRecords().sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt))
+  // topbar add already exists
+  if (!records.length){
+    const empty = document.createElement('div')
+    empty.className = 'record-page'
+    empty.innerHTML = '<p class="muted">No Decision Matrix records found. Click + Add Record to create new.</p>'
+    listingArea.appendChild(empty)
+    return
+  }
+  records.forEach(rec => {
+    const card = document.createElement('div')
+    card.className = 'record-card'
+    const meta = document.createElement('div'); meta.className='record-meta'
+    const title = document.createElement('div'); title.innerHTML = `<strong>${escapeHtml(rec.name)}</strong>`
+    const sub = document.createElement('div'); sub.className='small muted'
+    const applies = rec.appliesToDetail ? `${rec.appliesTo} (${escapeHtml(rec.appliesToDetail)})` : rec.appliesTo
+    sub.innerText = `${applies} • Coordinator: ${rec.coordinator}`
+    meta.appendChild(title); meta.appendChild(sub)
+    const actions = document.createElement('div'); actions.className = 'record-actions'
+    const btnView = document.createElement('button'); btnView.className='btn btn-primary'; btnView.innerText='View'
+    btnView.onclick = ()=> navigateTo('record', rec.id)
+    const btnEdit = document.createElement('button'); btnEdit.className='btn btn-cancel'; btnEdit.innerText='Edit'
+    btnEdit.onclick = ()=> openEditRecordModal(rec.id)
+    const btnDelete = document.createElement('button'); btnDelete.className='btn btn-danger'; btnDelete.innerText='Delete'
+    btnDelete.onclick = ()=> confirmDeleteRecord(rec.id)
+    actions.appendChild(btnView); actions.appendChild(btnEdit); actions.appendChild(btnDelete)
+    card.appendChild(meta); card.appendChild(actions)
+    listingArea.appendChild(card)
+  })
+}
+
+// ----- Record Page -----
+function renderRecordPage(id){
+  const records = loadRecords()
+  const rec = records.find(r=>r.id===id)
+  if (!rec) { listingArea.innerHTML = '<div class="record-page">Record not found</div>'; return }
+  pageTitle.innerText = rec.name
+  listingArea.innerHTML = ''
+  const container = document.createElement('div'); container.className='record-page'
+
+  // header area
+  const header = document.createElement('div'); header.style.marginBottom='12px'
+  header.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <div style="font-size:18px;font-weight:700">${escapeHtml(rec.name)}</div>
+        <div class="small muted">${rec.appliesTo}${rec.appliesToDetail ? ' ('+escapeHtml(rec.appliesToDetail)+')':''} • Coordinator: ${escapeHtml(rec.coordinator)}</div>
+        ${rec.description ? '<div style="margin-top:8px">'+escapeHtml(rec.description)+'</div>' : ''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-cancel" id="record-edit-meta">Edit</button>
+        <button class="btn btn-danger" id="record-delete">Delete</button>
+      </div>
+    </div>
+  `
+  container.appendChild(header)
+
+  // Banner rules
+  const bannerWrap = document.createElement('div'); bannerWrap.className='banner'
+  const col1 = document.createElement('div'); col1.className='banner-col'
+  const col2 = document.createElement('div'); col2.className='banner-col'
+  const col3 = document.createElement('div'); col3.className='banner-col'
+  col1.innerHTML = `<div class="banner-head">% Change Rating Rules</div><div class="rules-list" id="pctRulesList"></div>`
+  col2.innerHTML = `<div class="banner-head">Complaint Rating Rules</div><div class="rules-list" id="complaintRulesList"></div>`
+  col3.innerHTML = `<div class="banner-head">Frequency Rules</div><div class="rules-list" id="frequencyRulesList"></div>`
+  const cfgBtn = document.createElement('button'); cfgBtn.className='btn btn-primary configure-btn'; cfgBtn.innerText='Configure Rules'
+  cfgBtn.onclick = ()=> openRulesModal(rec.id)
+  col3.appendChild(cfgBtn)
+  bannerWrap.appendChild(col1); bannerWrap.appendChild(col2); bannerWrap.appendChild(col3)
+  container.appendChild(bannerWrap)
+
+  // Table wrap with add button top-right
+  const tableWrapOuter = document.createElement('div'); tableWrapOuter.style.position='relative'
+  const addRowBtn = document.createElement('button'); addRowBtn.className='btn btn-accent add-top-right'; addRowBtn.style.position='absolute'; addRowBtn.style.right='12px'; addRowBtn.style.top='0'; addRowBtn.innerText='+ Add Row'
+  addRowBtn.onclick = ()=> openAddRowInline(rec.id)
+  tableWrapOuter.appendChild(addRowBtn)
+
+  const tableWrap = document.createElement('div'); tableWrap.className='table-wrap'
+  tableWrap.innerHTML = `<table id="matrixTable">
+    <thead>
+      <tr>
+        <th style="width:180px">Applies To Instance</th>
+        <th>Target PPM</th>
+        <th>Actual PPM</th>
+        <th>% Change</th>
+        <th>PPM Rating</th>
+        <th>Complaints</th>
+        <th>Complaint Rating</th>
+        <th>Final Rating</th>
+        <th>Frequency</th>
+        <th style="width:140px">Action</th>
+      </tr>
+    </thead>
+    <tbody id="matrixBody"></tbody>
+  </table>`
+  tableWrapOuter.appendChild(tableWrap)
+  container.appendChild(tableWrapOuter)
+
+  // Send to Schedule
+  const sendWrap = document.createElement('div'); sendWrap.style.marginTop='12px'
+  const sendBtn = document.createElement('button'); sendBtn.className='btn btn-accent'; sendBtn.innerText='Send to Schedule'
+  sendBtn.onclick = ()=> sendRecordToSchedule(rec.id)
+  sendWrap.appendChild(sendBtn)
+  container.appendChild(sendWrap)
+
+  listingArea.appendChild(container)
+
+  // wire header edit/delete
+  qs('#record-edit-meta').onclick = ()=> openEditRecordModal(rec.id)
+  qs('#record-delete').onclick = ()=> confirmDeleteRecord(rec.id)
+
+  // populate rules banner and table
+  refreshRulesBanner(rec)
+  refreshMatrixTable(rec)
+}
+
+// ----- Send to Schedule -----
+function sendRecordToSchedule(id){
+  const records = loadRecords()
+  const rec = records.find(r=>r.id===id)
+  if (!rec) return alert('Record not found')
+  const schedule = loadSchedule()
+  // push a deep copy and stamp createdAt
+  const copy = JSON.parse(JSON.stringify(rec))
+  copy.sentAt = nowISO()
+  schedule.push(copy)
+  saveSchedule(schedule)
+  alert('Record sent to Audit Schedule (saved to localStorage).')
+}
+
+// ----- Table rendering & row operations -----
+function refreshMatrixTable(rec){
+  const tbody = qs('#matrixBody')
+  if (!tbody) return
+  tbody.innerHTML = ''
+  // ensure rec.rows exists
+  rec.rows = rec.rows || []
+  for (const row of rec.rows){
+    const tr = document.createElement('tr')
+    tr.dataset.rowId = row.rowId
+    const pctChange = recCalcPctChange(row.targetPPM, row.actualPPM)
+    row.pctChange = pctChange
+    // evaluate ratings
+    const pctRating = evaluateRating(rec.rules.pctChangeRules||[], pctChange)
+    row.pctChangeRating = pctRating === null ? null : pctRating
+    const complaintRating = evaluateRating(rec.rules.complaintRules||[], row.complaints)
+    row.complaintRating = complaintRating === null ? null : complaintRating
+    const finalRating = (typeof pctRating === 'number' && typeof complaintRating === 'number') ? round2(pctRating * complaintRating) : null
+    row.finalRating = finalRating
+    const freqObj = evaluateFrequency(rec.rules.frequencyRules||[], finalRating)
+    if (freqObj){ row.frequency = freqObj.frequency; row.frequencyColor = freqObj.color }
+    // build cells
+    tr.innerHTML = `
+      <td>${escapeHtml(row.appliesToInstance || '')}</td>
+      <td><input type="number" class="small-input" data-field="targetPPM" value="${row.targetPPM !== undefined && row.targetPPM !== null ? row.targetPPM : ''}" /></td>
+      <td><input type="number" class="small-input" data-field="actualPPM" value="${row.actualPPM !== undefined && row.actualPPM !== null ? row.actualPPM : ''}" /></td>
+      <td>${row.targetPPM===0 ? 'N/A' : (row.pctChange===null ? '' : row.pctChange + '%')}</td>
+      <td>${row.pctChangeRating===null ? '' : escapeHtml(String(row.pctChangeRating))}</td>
+      <td><input type="number" class="small-input" data-field="complaints" value="${row.complaints !== undefined && row.complaints !== null ? row.complaints : ''}" /></td>
+      <td>${row.complaintRating===null ? '' : escapeHtml(String(row.complaintRating))}</td>
+      <td>${row.finalRating===null ? '' : escapeHtml(String(row.finalRating))}</td>
+      <td>${row.frequency ? `<span class="pill" style="background:${row.frequencyColor};color:#fff">${escapeHtml(row.frequency)}</span>` : ''}</td>
+      <td>
+        <div class="flex">
+          <button class="action-btn btn btn-primary btn-edit">Save</button>
+          <button class="action-btn btn btn-danger btn-delete">Delete</button>
+        </div>
+      </td>
+    `
+    // wire inline changes
+    tr.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('change', (e)=>{
+        const field = inp.dataset.field
+        const val = inp.value === '' ? null : Number(inp.value)
+        row[field] = val
+        // recalc and persist only on Save click (but show live pctChange & ratings)
+        const pctC = recCalcPctChange(row.targetPPM, row.actualPPM); row.pctChange = pctC
+        row.pctChangeRating = evaluateRating(rec.rules.pctChangeRules||[], pctC)
+        row.complaintRating = evaluateRating(rec.rules.complaintRules||[], row.complaints)
+        row.finalRating = (typeof row.pctChangeRating === 'number' && typeof row.complaintRating === 'number') ? round2(row.pctChangeRating * row.complaintRating) : null
+        const freq = evaluateFrequency(rec.rules.frequencyRules||[], row.finalRating)
+        if (freq){ row.frequency = freq.frequency; row.frequencyColor = freq.color }
+        refreshMatrixTable(rec)
+      })
+    })
+    // Save button
+    tr.querySelector('.btn-edit').onclick = ()=>{
+      row.saved = true
+      row.rowId = row.rowId || uid('r')
+      // persist change
+      updateRecord(rec.id, rec)
+      refreshMatrixTable(rec)
+    }
+    // Delete button
+    tr.querySelector('.btn-delete').onclick = ()=>{
+      if (!confirm('Delete this row?')) return
+      rec.rows = rec.rows.filter(r=>r.rowId !== row.rowId)
+      updateRecord(rec.id, rec)
+      refreshMatrixTable(rec)
+    }
+    tbody.appendChild(tr)
   }
 }
+
+// helper: add a blank row inline
+function openAddRowInline(recordId){
+  const records = loadRecords()
+  const rec = records.find(r=>r.id===recordId)
+  if (!rec) return
+  const newRow = { rowId: uid('r'), appliesToInstance: rec.appliesToDetail || rec.appliesTo, targetPPM:null, actualPPM:null, pctChange:null, pctChangeRating:null, complaints:null, complaintRating:null, finalRating:null, frequency:null, frequencyColor:null, saved:false }
+  rec.rows = rec.rows || []
+  rec.rows.unshift(newRow) // top
+  updateRecord(rec.id, rec)
+  renderRecordPage(rec.id)
+}
+
+// ----- Rules evaluation helpers -----
+// operations: in_between, gte, lte, gt, lt, eq (strings in rules)
+function matchesOp(op, value, rule){
+  if (value===null || value===undefined) return false
+  switch(op){
+    case 'in_between':
+      return value >= Number(rule.min) && value <= Number(rule.max)
+    case 'gte': return value >= Number(rule.value)
+    case 'lte': return value <= Number(rule.value)
+    case 'gt': return value > Number(rule.value)
+    case 'lt': return value < Number(rule.value)
+    case 'eq': return value === Number(rule.value)
+    default: return false
+  }
+}
+function evaluateRating(rulesArray, value){
+  if (!Array.isArray(rulesArray) || !value && value!==0) {
+    // If no rules or value missing, return null
+    return null
+  }
+  // prefer exact matching rules in their defined order
+  for (const r of rulesArray){
+    if (r.operation === 'in_between'){
+      if (value >= Number(r.min) && value <= Number(r.max)) return safeParseRating(r.rating)
+    } else {
+      const val = Number(r.value)
+      switch(r.operation){
+        case 'gte': if (value >= val) return safeParseRating(r.rating); break;
+        case 'lte': if (value <= val) return safeParseRating(r.rating); break;
+        case 'gt': if (value > val) return safeParseRating(r.rating); break;
+        case 'lt': if (value < val) return safeParseRating(r.rating); break;
+        case 'eq': if (value === val) return safeParseRating(r.rating); break;
+      }
+    }
+  }
+  return null
+}
+function safeParseRating(r){
+  // rating might be numeric or string like "A" - for calculation we prefer numeric
+  const n = Number(r)
+  return Number.isFinite(n) ? n : r
+}
+function evaluateFrequency(freqRules, finalRating){
+  if (!Array.isArray(freqRules) || finalRating===null || finalRating===undefined) return null
+  for (const r of freqRules){
+    if (r.operation === 'in_between'){
+      if (finalRating >= Number(r.min) && finalRating <= Number(r.max)) return { frequency:r.frequency, color:r.color }
+    } else {
+      const val = Number(r.value)
+      switch(r.operation){
+        case 'gte': if (finalRating >= val) return { frequency:r.frequency, color:r.color }; break;
+        case 'lte': if (finalRating <= val) return { frequency:r.frequency, color:r.color }; break;
+        case 'gt': if (finalRating > val) return { frequency:r.frequency, color:r.color }; break;
+        case 'lt': if (finalRating < val) return { frequency:r.frequency, color:r.color }; break;
+        case 'eq': if (finalRating === val) return { frequency:r.frequency, color:r.color }; break;
+      }
+    }
+  }
+  return null
+}
+function recCalcPctChange(target, actual){
+  if (target === null || target === undefined || target === 0) return null
+  if (actual === null || actual === undefined) return null
+  const pc = ((target - actual) / target) * 100
+  return round2(pc)
+}
+
+// ----- Rules banner rendering -----
+function refreshRulesBanner(rec){
+  const pctList = qs('#pctRulesList')
+  const cptList = qs('#complaintRulesList')
+  const freqList = qs('#frequencyRulesList')
+  pctList.innerHTML = ''; cptList.innerHTML=''; freqList.innerHTML=''
+  (rec.rules.pctChangeRules || []).forEach(r=>{
+    const txt = `${escapeHtml(String(r.rating))} - ${escapeHtml(String(r.description||''))}`
+    const el = document.createElement('div'); el.innerText = txt; pctList.appendChild(el)
+  })
+  (rec.rules.complaintRules || []).forEach(r=>{
+    const txt = `${escapeHtml(String(r.rating))} - ${escapeHtml(String(r.description||''))}`
+    const el = document.createElement('div'); el.innerText = txt; cptList.appendChild(el)
+  })
+  (rec.rules.frequencyRules || []).forEach(r=>{
+    const txt = `${escapeHtml(String(r.value!==null? r.value : (r.min!==null? r.min : '')))} → ${escapeHtml(String(r.frequency))}`
+    const el = document.createElement('div'); el.innerHTML = `<span class="pill" style="background:${r.color};color:#fff">${escapeHtml(r.frequency)}</span> ${escapeHtml(r.operation==='in_between' ? (` ${r.min} - ${r.max}`) : (r.value!==null? r.value : ''))}`; freqList.appendChild(el)
+  })
+}
+
+// ----- CRUD for records -----
+function addRecord(obj){
+  const arr = loadRecords()
+  arr.push(obj)
+  saveRecords(arr)
+}
+function updateRecord(id, obj){
+  const arr = loadRecords()
+  const idx = arr.findIndex(r=>r.id===id)
+  if (idx === -1) return
+  arr[idx] = obj
+  obj.updatedAt = nowISO()
+  saveRecords(arr)
+}
+function deleteRecord(id){
+  let arr = loadRecords()
+  arr = arr.filter(r=>r.id !== id)
+  saveRecords(arr)
+}
+
+// ----- Modals: Create / Edit Record -----
+function openCreateRecordModal(){
+  const html = `
+    <div class="overlay" id="modal-create">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>Create New Decision Matrix</h3>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Name *</label>
+            <input id="c_name" type="text" maxlength="100" />
+          </div>
+          <div class="form-col">
+            <label>Coordinator *</label>
+            <input id="c_coord" type="text" maxlength="80" />
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label>Applies To *</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="applies" value="Line" checked /> Line</label>
+            <label><input type="radio" name="applies" value="Plant" /> Plant</label>
+            <label><input type="radio" name="applies" value="Supplier" /> Supplier</label>
+          </div>
+        </div>
+        <div id="applies-detail-row" class="form-row" style="display:flex">
+          <div class="form-col">
+            <label>Detail (optional)</label>
+            <input id="c_appliesDetail" type="text" maxlength="60" placeholder="Line Identifier / Plant Code / Supplier Name" />
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label>Description (optional)</label>
+          <textarea id="c_desc" maxlength="500"></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+          <button id="c_cancel" class="btn btn-cancel">Cancel</button>
+          <button id="c_create" class="btn btn-accent" disabled>Create</button>
+        </div>
+      </div>
+    </div>
+  `
+  modalRoot.innerHTML = html
+  // events
+  const overlay = qs('#modal-create')
+  overlay.onclick = (e)=>{ if (e.target === overlay) closeModal() }
+  qs('#c_cancel').onclick = closeModal
+  const toggleCreateBtn = ()=> {
+    const name = qs('#c_name').value.trim()
+    const coord = qs('#c_coord').value.trim()
+    qs('#c_create').disabled = !(name && coord)
+  }
+  qs('#c_name').addEventListener('input', toggleCreateBtn)
+  qs('#c_coord').addEventListener('input', toggleCreateBtn)
+  qs('input[name="applies"]').forEach(r=> r.addEventListener('change', ()=>{}))
+  qs('#c_create').onclick = ()=>{
+    const name = qs('#c_name').value.trim()
+    const coord = qs('#c_coord').value.trim()
+    const applies = qs('input[name="applies"]:checked').value
+    const detail = qs('#c_appliesDetail').value.trim()
+    const desc = qs('#c_desc').value.trim()
+    const rec = {
+      id: uid('dm'),
+      name, appliesTo: applies, appliesToDetail: detail||'', coordinator: coord, description: desc||'', createdAt: nowISO(), updatedAt: nowISO(),
+      rows: [], rules: { pctChangeRules:[], complaintRules:[], frequencyRules:[] }
+    }
+    addRecord(rec)
+    closeModal()
+    renderListing()
+  }
+}
+
+function openEditRecordModal(recordId){
+  const rec = loadRecords().find(r=>r.id===recordId)
+  if (!rec) return alert('Record not found')
+  const html = `
+    <div class="overlay" id="modal-edit">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h3>Edit Decision Matrix</h3>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Name *</label>
+            <input id="e_name" type="text" maxlength="100" value="${escapeHtmlAttr(rec.name)}" />
+          </div>
+          <div class="form-col">
+            <label>Coordinator *</label>
+            <input id="e_coord" type="text" maxlength="80" value="${escapeHtmlAttr(rec.coordinator)}" />
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label>Applies To *</label>
+          <div class="radio-inline">
+            <label><input type="radio" name="e_applies" value="Line" ${rec.appliesTo==='Line'?'checked':''} /> Line</label>
+            <label><input type="radio" name="e_applies" value="Plant" ${rec.appliesTo==='Plant'?'checked':''} /> Plant</label>
+            <label><input type="radio" name="e_applies" value="Supplier" ${rec.appliesTo==='Supplier'?'checked':''} /> Supplier</label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label>Detail (optional)</label>
+            <input id="e_appliesDetail" type="text" maxlength="60" value="${escapeHtmlAttr(rec.appliesToDetail||'')}" />
+          </div>
+        </div>
+        <div>
+          <label>Description (optional)</label>
+          <textarea id="e_desc">${escapeHtmlAttr(rec.description||'')}</textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+          <button id="e_cancel" class="btn btn-cancel">Cancel</button>
+          <button id="e_save" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  `
+  modalRoot.innerHTML = html
+  const overlay = qs('#modal-edit')
+  overlay.onclick = (e)=>{ if (e.target === overlay) closeModal() }
+  qs('#e_cancel').onclick = closeModal
+  qs('#e_save').onclick = ()=>{
+    const name = qs('#e_name').value.trim()
+    const coord = qs('#e_coord').value.trim()
+    const applies = qs('input[name="e_applies"]:checked').value
+    const detail = qs('#e_appliesDetail').value.trim()
+    const desc = qs('#e_desc').value.trim()
+    rec.name = name; rec.coordinator = coord; rec.appliesTo = applies; rec.appliesToDetail = detail||''; rec.description = desc||''; rec.updatedAt = nowISO()
+    updateRecord(rec.id, rec)
+    closeModal()
+    if (appState.view==='record' && appState.currentId===rec.id) renderRecordPage(rec.id)
+    else renderListing()
+  }
+}
+
+// ----- Rules Modal -----
+function openRulesModal(recordId){
+  const rec = loadRecords().find(r=>r.id===recordId)
+  if (!rec) return alert('Record not found')
+  const html = `
+    <div class="overlay" id="modal-rules">
+      <div class="modal" role="dialog" aria-modal="true" style="width:880px;max-width:98%">
+        <h3>Configure Rules - ${escapeHtml(rec.name)}</h3>
+        <div style="display:flex;gap:12px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-weight:600"> % Change Rating Rules</div>
+              <button id="addPctRule" class="btn btn-accent">+ Add Rule</button>
+            </div>
+            <table style="width:100%;margin-top:8px;border-collapse:collapse">
+              <thead><tr style="background:${'#E3F2FD'}"><th>Operation</th><th>Min</th><th>Max</th><th>Value</th><th>Rating</th><th>Description</th><th>Action</th></tr></thead>
+              <tbody id="pctRulesTable"></tbody>
+            </table>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-weight:600"> Complaint Rating Rules</div>
+              <button id="addComplaintRule" class="btn btn-accent">+ Add Rule</button>
+            </div>
+            <table style="width:100%;margin-top:8px;border-collapse:collapse">
+              <thead><tr style="background:${'#E3F2FD'}"><th>Operation</th><th>Min</th><th>Max</th><th>Value</th><th>Rating</th><th>Description</th><th>Action</th></tr></thead>
+              <tbody id="complaintRulesTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="font-weight:600"> Frequency Rules</div>
+            <button id="addFreqRule" class="btn btn-accent">+ Add Rule</button>
+          </div>
+          <table style="width:100%;margin-top:8px;border-collapse:collapse">
+            <thead><tr style="background:${'#E3F2FD'}"><th>Operation</th><th>Min</th><th>Max</th><th>Value</th><th>Final Rating</th><th>Frequency</th><th>Color</th><th>Action</th></tr></thead>
+            <tbody id="freqRulesTable"></tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+          <button id="r_cancel" class="btn btn-cancel">Cancel</button>
+          <button id="r_save" class="btn btn-primary">Save Rules</button>
+        </div>
+      </div>
+    </div>
+  `
+  modalRoot.innerHTML = html
+  const overlay = qs('#modal-rules')
+  overlay.onclick = (e)=>{ if (e.target === overlay) closeModal() }
+
+  // populate existing rules into tables
+  function renderRulesTables(){
+    const pctBody = qs('#pctRulesTable'); pctBody.innerHTML = ''
+    const compBody = qs('#complaintRulesTable'); compBody.innerHTML = ''
+    const freqBody = qs('#freqRulesTable'); freqBody.innerHTML = ''
+    (rec.rules.pctChangeRules || []).forEach(r=>{
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td><select class="op">${renderOpOptions(r.operation)}</select></td>
+        <td><input class="min" type="number" value="${r.min !== null && r.min !== undefined ? r.min : ''}" /></td>
+        <td><input class="max" type="number" value="${r.max !== null && r.max !== undefined ? r.max : ''}" /></td>
+        <td><input class="val" type="number" value="${r.value !== null && r.value !== undefined ? r.value : ''}" /></td>
+        <td><input class="rating" type="text" value="${escapeHtmlAttr(r.rating)}" /></td>
+        <td><input class="desc" type="text" value="${escapeHtmlAttr(r.description||'')}" /></td>
+        <td><button class="btn btn-danger btn-del-rule">Delete</button></td>`
+      // wire delete, store row data in dom
+      tr.querySelector('.btn-del-rule').onclick = ()=>{
+        if (!confirm('Delete this rule?')) return
+        rec.rules.pctChangeRules = rec.rules.pctChangeRules.filter(rr=>rr.ruleId !== r.ruleId)
+        renderRulesTables()
+      }
+      pctBody.appendChild(tr)
+    })
+    (rec.rules.complaintRules || []).forEach(r=>{
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td><select class="op">${renderOpOptions(r.operation)}</select></td>
+        <td><input class="min" type="number" value="${r.min !== null && r.min !== undefined ? r.min : ''}" /></td>
+        <td><input class="max" type="number" value="${r.max !== null && r.max !== undefined ? r.max : ''}" /></td>
+        <td><input class="val" type="number" value="${r.value !== null && r.value !== undefined ? r.value : ''}" /></td>
+        <td><input class="rating" type="text" value="${escapeHtmlAttr(r.rating)}" /></td>
+        <td><input class="desc" type="text" value="${escapeHtmlAttr(r.description||'')}" /></td>
+        <td><button class="btn btn-danger btn-del-rule">Delete</button></td>`
+      tr.querySelector('.btn-del-rule').onclick = ()=>{
+        if (!confirm('Delete this rule?')) return
+        rec.rules.complaintRules = rec.rules.complaintRules.filter(rr=>rr.ruleId !== r.ruleId)
+        renderRulesTables()
+      }
+      compBody.appendChild(tr)
+    })
+    (rec.rules.frequencyRules || []).forEach(r=>{
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td><select class="op">${renderOpOptions(r.operation)}</select></td>
+        <td><input class="min" type="number" value="${r.min !== null && r.min !== undefined ? r.min : ''}" /></td>
+        <td><input class="max" type="number" value="${r.max !== null && r.max !== undefined ? r.max : ''}" /></td>
+        <td><input class="val" type="number" value="${r.value !== null && r.value !== undefined ? r.value : ''}" /></td>
+        <td><input class="finalRating" type="text" value="${escapeHtmlAttr(r.value!==null? r.value : '')}" /></td>
+        <td><select class="freq">
+            <option ${r.frequency==='Monthly'?'selected':''}>Monthly</option>
+            <option ${r.frequency==='Yearly'?'selected':''}>Yearly</option>
+            <option ${r.frequency==='Once Every 2 Years'?'selected':''}>Once Every 2 Years</option>
+            <option ${r.frequency==='Weekly'?'selected':''}>Weekly</option>
+            <option ${r.frequency==='Daily'?'selected':''}>Daily</option>
+          </select></td>
+        <td><select class="color">
+            <option value="#D32F2F" ${r.color==='#D32F2F'?'selected':''}>Red</option>
+            <option value="#1976D2" ${r.color==='#1976D2'?'selected':''}>Blue</option>
+            <option value="#4CAF50" ${r.color==='#4CAF50'?'selected':''}>Green</option>
+            <option value="#FF9800" ${r.color==='#FF9800'?'selected':''}>Orange</option>
+            <option value="#8E24AA" ${r.color==='#8E24AA'?'selected':''}>Purple</option>
+          </select></td>
+        <td><button class="btn btn-danger btn-del-rule">Delete</button></td>`
+      tr.querySelector('.btn-del-rule').onclick = ()=>{
+        if (!confirm('Delete this rule?')) return
+        rec.rules.frequencyRules = rec.rules.frequencyRules.filter(rr=>rr.ruleId !== r.ruleId)
+        renderRulesTables()
+      }
+      freqBody.appendChild(tr)
+    })
+  }
+  function renderOpOptions(selected){
+    const ops = ['in_between','gte','lte','gt','lt','eq']
+    return ops.map(o=>`<option value="${o}" ${o===selected?'selected':''}>${opLabel(o)}</option>`).join('')
+  }
+  function opLabel(o){
+    switch(o){ case 'in_between': return 'In Between'; case 'gte': return 'Greater than or Equal to'; case 'lte': return 'Less than or Equal to'; case 'gt': return 'Greater than'; case 'lt': return 'Less than'; case 'eq': return 'Equal to'; default: return o }
+  }
+
+  // Add new rule handlers
+  qs('#addPctRule').onclick = ()=>{
+    rec.rules.pctChangeRules = rec.rules.pctChangeRules || []
+    rec.rules.pctChangeRules.unshift({ ruleId: uid('pr'), operation:'in_between', min:0, max:0, value:null, rating:'', description:'' })
+    renderRulesTables()
+  }
+  qs('#addComplaintRule').onclick = ()=>{
+    rec.rules.complaintRules = rec.rules.complaintRules || []
+    rec.rules.complaintRules.unshift({ ruleId: uid('cr'), operation:'in_between', min:0, max:0, value:null, rating:'', description:'' })
+    renderRulesTables()
+  }
+  qs('#addFreqRule').onclick = ()=>{
+    rec.rules.frequencyRules = rec.rules.frequencyRules || []
+    rec.rules.frequencyRules.unshift({ ruleId: uid('fr'), operation:'in_between', min:0, max:0, value:null, frequency:'Monthly', color:'#FF9800' })
+    renderRulesTables()
+  }
+
+  // Save rules wiring: read all table rows back into rec.rules arrays
+  qs('#r_cancel').onclick = closeModal
+  qs('#r_save').onclick = ()=>{
+    // pct rules
+    const pctRows = qsa('#pctRulesTable tr').map(tr=>{
+      return {
+        ruleId: rec.rules.pctChangeRules && rec.rules.pctChangeRules.length ? (rec.rules.pctChangeRules.shift()||uid('pr')) : uid('pr'),
+        operation: tr.querySelector('.op').value,
+        min: tr.querySelector('.min').value === '' ? null : Number(tr.querySelector('.min').value),
+        max: tr.querySelector('.max').value === '' ? null : Number(tr.querySelector('.max').value),
+        value: tr.querySelector('.val').value === '' ? null : Number(tr.querySelector('.val').value),
+        rating: tr.querySelector('.rating').value,
+        description: tr.querySelector('.desc').value
+      }
+    })
+    // complaint rules
+    const compRows = qsa('#complaintRulesTable tr').map(tr=>({
+      ruleId: rec.rules.complaintRules && rec.rules.complaintRules.length ? (rec.rules.complaintRules.shift()||uid('cr')) : uid('cr'),
+      operation: tr.querySelector('.op').value,
+      min: tr.querySelector('.min').value === '' ? null : Number(tr.querySelector('.min').value),
+      max: tr.querySelector('.max').value === '' ? null : Number(tr.querySelector('.max').value),
+      value: tr.querySelector('.val').value === '' ? null : Number(tr.querySelector('.val').value),
+      rating: tr.querySelector('.rating').value,
+      description: tr.querySelector('.desc').value
+    }))
+    // frequency rules
+    const freqRows = qsa('#freqRulesTable tr').map(tr=>({
+      ruleId: rec.rules.frequencyRules && rec.rules.frequencyRules.length ? (rec.rules.frequencyRules.shift()||uid('fr')) : uid('fr'),
+      operation: tr.querySelector('.op').value,
+      min: tr.querySelector('.min').value === '' ? null : Number(tr.querySelector('.min').value),
+      max: tr.querySelector('.max').value === '' ? null : Number(tr.querySelector('.max').value),
+      value: tr.querySelector('.val').value === '' ? null : Number(tr.querySelector('.val').value),
+      frequency: tr.querySelector('.freq').value,
+      color: tr.querySelector('.color').value
+    }))
+
+    rec.rules.pctChangeRules = pctRows
+    rec.rules.complaintRules = compRows
+    rec.rules.frequencyRules = freqRows
+    updateRecord(rec.id, rec)
+    closeModal()
+    renderRecordPage(rec.id)
+  }
+
+  // initial render
+  renderRulesTables()
+}
+
+// ----- Delete confirmation -----
+function confirmDeleteRecord(recordId){
+  const rec = loadRecords().find(r=>r.id===recordId)
+  if (!rec) return
+  if (!confirm(`Are you sure you want to permanently delete "${rec.name}"? This action cannot be undone.`)) return
+  deleteRecord(recordId)
+  if (appState.view==='record' && appState.currentId===recordId) navigateTo('listing')
+  else renderListing()
+}
+
+// ----- Helpers: close modal & escape HTML -----
+function closeModal(){ modalRoot.innerHTML = '' }
+function escapeHtml(s){ if (s===null || s===undefined) return ''; return String(s).replace(/[&<>"']/g, ch=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[ch]) }
+function escapeHtmlAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;') }
+
+// ----- Delete record global method (wired elsewhere) -----
+window.deleteRecord = deleteRecord
+
+// ----- Navigation events -----
+document.getElementById('add-record-btn').onclick = openCreateRecordModal
+navMatrix.onclick = ()=> navigateTo('listing')
+navSchedule.onclick = ()=> navigateTo('schedule')
+
+// ----- Audit Schedule placeholder -----
+function renderSchedule(){
+  pageTitle.innerText = 'Audit Schedule'
+  listingArea.innerHTML = ''
+  const container = document.createElement('div'); container.className='record-page'
+  container.innerHTML = `<h3>Audit Schedule - Coming Soon</h3>
+    <p class="muted">Scheduled records stored in localStorage under key <code>auditScheduleRecords</code>.</p>
+    <div style="margin-top:12px;">
+      <button class="btn btn-accent" id="show-schedule-data">Show Saved Schedule Records (localStorage)</button>
+    </div>
+    <div id="schedule-list" style="margin-top:12px"></div>`
+  listingArea.appendChild(container)
+  qs('#show-schedule-data').onclick = ()=>{
+    const s = loadSchedule()
+    const el = qs('#schedule-list'); el.innerHTML = ''
+    if (!s.length) { el.innerHTML = '<div class="muted">No schedule records yet.</div>'; return }
+    s.forEach(rec=>{
+      const elc = document.createElement('div'); elc.className='record-card'
+      elc.innerHTML = `<div><strong>${escapeHtml(rec.name)}</strong><div class="small muted">${rec.appliesTo}${rec.appliesToDetail? ' ('+escapeHtml(rec.appliesToDetail)+')':''}</div></div>
+        <div><div class="small muted">Sent: ${escapeHtml(rec.sentAt||'')}</div></div>`
+      el.appendChild(elc)
+    })
+  }
+}
+
+// ----- Initial load & router -----
+ensureDemoData()
+function renderView(){
+  if (appState.view === 'listing') { renderListing() }
+  else if (appState.view === 'record') { renderRecordPage(appState.currentId) }
+  else if (appState.view === 'schedule') { renderSchedule() }
+}
+renderView()
+
+// On load, navigate based on URL
+(function initFromUrl(){
+  const path = location.pathname
+  if (path === '/' || path === '') { navigateTo('listing', null, false) }
+  else if (path === '/schedule') { navigateTo('schedule', null, false) }
+  else if (path.startsWith('/decision-matrix/')) {
+    const id = path.split('/').pop()
+    navigateTo('record', id, false)
+  } else { navigateTo('listing', null, false) }
+})()
+
+// ----- Utility: update rules display on record page on changes in localStorage (when edit modal applied) -----
+window.addEventListener('storage', (e)=> {
+  // nothing for now
+})
+
+</script>
+</body>
+</html>
